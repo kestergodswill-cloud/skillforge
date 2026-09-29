@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { 
   HiOutlineCalendar, 
@@ -27,6 +27,7 @@ export default function HostDashboard() {
   const [myListings, setMyListings] = useState<any[]>([]);
   const [registrations, setRegistrations] = useState<{ [key: string]: any[] }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showGuestModal, setShowGuestModal] = useState(false);
   
   const [activeTabApplicants, setActiveTabApplicants] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -47,8 +48,9 @@ export default function HostDashboard() {
       if (!currentUser) {
         router.push('/auth?next=/host');
       } else if (currentUser.isAnonymous) {
-        alert("You need to create a free account to use this feature!");
-        router.push('/auth?next=/host');
+        setIsChecking(false);
+        setIsLoading(false);
+        setShowGuestModal(true);
       } else {
         setUser(currentUser);
         setIsChecking(false);
@@ -94,6 +96,16 @@ export default function HostDashboard() {
     });
     return () => unsubscribe();
   }, [router]);
+
+  const handleUpgradeAccount = async () => {
+    try {
+      await signOut(auth);
+      router.push('/auth?next=/host');
+    } catch (error) {
+      console.error('Error signing out guest:', error);
+      router.push('/auth?next=/host');
+    }
+  };
 
   const handleDeleteListing = async (id: string) => {
     if (!confirm("Are you sure you want to permanently delete this event?")) return;
@@ -171,7 +183,7 @@ export default function HostDashboard() {
     return true;
   });
 
-  if (isChecking || isLoading) {
+  if ((isChecking || isLoading) && !showGuestModal) {
     return (
       <main className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-between transition-colors duration-300">
         <Navbar />
@@ -185,6 +197,34 @@ export default function HostDashboard() {
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col justify-between font-sans transition-colors duration-300">
+      
+      {showGuestModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-[380px] rounded-2xl shadow-xl p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              Host an event
+            </h3>
+            <p className="text-[14px] text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+              Guest users cannot host events or manage applicants. Register for a free profile to unlock all community features.
+            </p>
+            <div className="flex flex-col sm:flex-row-reverse gap-3">
+              <button 
+                onClick={handleUpgradeAccount} 
+                className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 text-white text-[14px] font-semibold rounded-lg hover:bg-emerald-500 transition-colors cursor-pointer"
+              >
+                Create free profile
+              </button>
+              <button 
+                onClick={() => router.back()} 
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[14px] font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Navbar />
       
       <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-6 sm:pt-8 px-5 sm:px-6">
@@ -417,19 +457,14 @@ export default function HostDashboard() {
       </div>
 
       {editingEvent && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 transition-opacity font-sans">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 transition-opacity font-sans">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-[420px] rounded-2xl shadow-xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in zoom-in-95 duration-200">
             
-            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-3 sm:hidden shrink-0" />
-            
-            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0">
-              <div>
-                <h3 className="text-[18px] font-extrabold text-slate-900 dark:text-white">Edit Event</h3>
-                <p className="text-[12px] font-medium text-slate-500 mt-0.5">Quickly update your listing details.</p>
-              </div>
+            <div className="px-6 py-5 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Event</h3>
               <button 
                 onClick={() => setEditingEvent(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-full transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors cursor-pointer"
               >
                 <HiOutlineXMark className="text-xl" />
               </button>
@@ -439,68 +474,68 @@ export default function HostDashboard() {
               <form id="editForm" onSubmit={handleEditSubmit} className="space-y-4">
                 
                 <div>
-                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Event Title</label>
+                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Event Title</label>
                   <input
                     type="text"
                     value={editForm.title}
                     onChange={(e) => setEditForm({...editForm, title: e.target.value})}
                     required
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Schedule / Time</label>
+                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Schedule / Time</label>
                   <input
                     type="text"
                     value={editForm.schedule}
                     onChange={(e) => setEditForm({...editForm, schedule: e.target.value})}
                     required
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                   />
                 </div>
 
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">City</label>
+                    <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">City</label>
                     <input
                       type="text"
                       value={editForm.city}
                       onChange={(e) => setEditForm({...editForm, city: e.target.value})}
                       required
-                      className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Country</label>
+                    <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Country</label>
                     <input
                       type="text"
                       value={editForm.country}
                       onChange={(e) => setEditForm({...editForm, country: e.target.value})}
                       required
-                      className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Description</label>
+                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
                   <textarea
                     value={editForm.description}
                     onChange={(e) => setEditForm({...editForm, description: e.target.value})}
                     required
                     rows={4}
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none resize-none transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none resize-none transition-all"
                   />
                 </div>
 
               </form>
             </div>
 
-            <div className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-end gap-3 rounded-b-3xl">
+            <div className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
               <button 
                 onClick={() => setEditingEvent(null)}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-[13px] font-bold text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-[14px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -508,7 +543,7 @@ export default function HostDashboard() {
                 type="submit"
                 form="editForm"
                 disabled={isProcessingEdit}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-xl text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-[14px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {isProcessingEdit ? 'Saving...' : 'Save Changes'}
               </button>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
@@ -34,7 +33,6 @@ function ChatRoomContent() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // Chat Type States
   const [isGroup, setIsGroup] = useState(false);
   const [groupData, setGroupData] = useState<any>(null);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
@@ -42,7 +40,6 @@ function ChatRoomContent() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [allPlatformUsers, setAllPlatformUsers] = useState<any[]>([]);
 
-  // 1-on-1 Recipient States
   const [recipient, setRecipient] = useState<any>(null);
   const [isRecipientOnline, setIsRecipientOnline] = useState(false);
   const [recipientLastSeenText, setRecipientLastSeenText] = useState('Offline');
@@ -881,7 +878,7 @@ function ChatRoomContent() {
             </div>
           ) : (
             <form onSubmit={handleSendMessage} className="flex items-center gap-2 relative">
-              <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+              <input type="file" accept="image/png, image/jpeg, image/jpg, image/webp, video/mp4, video/quicktime, application/pdf, .doc, .docx" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
               
               <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shrink-0 cursor-pointer">
                 <HiOutlinePaperClip className="text-xl" />

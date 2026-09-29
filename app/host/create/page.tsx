@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -58,6 +57,9 @@ export default function HostCreatePage() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser) {
         router.push('/auth?next=/host/create');
+      } else if (currentUser.isAnonymous) {
+        alert("You need to create a free account to use this feature!");
+        router.push('/auth?next=/host/create');
       } else {
         setUser(currentUser);
         setFormData(prev => ({
@@ -83,7 +85,7 @@ export default function HostCreatePage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > 50 * 1024 * 1024) {
-        alert("File is too large. Please select an image or video under 50MB.");
+        alert("File is too large. Please select an image under 50MB.");
         return;
       }
       setSelectedMedia(file);
@@ -163,7 +165,7 @@ export default function HostCreatePage() {
         uploadData.append('file', selectedMedia);
         uploadData.append('upload_preset', uploadPreset);
 
-        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/auto/upload`, {
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`, {
           method: 'POST',
           body: uploadData,
         });
@@ -253,7 +255,7 @@ export default function HostCreatePage() {
 
   return (
     <main className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col transition-colors duration-300 relative">
-      <Navbar/>
+      <Navbar />
       
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
@@ -536,8 +538,8 @@ export default function HostCreatePage() {
                         <>
                           <HiOutlinePhoto className="mx-auto h-12 w-12 text-slate-400 mb-3" />
                           <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Click to upload image</p>
-                          <p className="text-xs text-slate-500 mt-1.5">PNG, JPG up to 50MB</p>
-                          <input id="file-upload" type="file" className="sr-only" accept="image/*,video/*" onChange={handleFileChange} />
+                          <p className="text-xs text-slate-500 mt-1.5">PNG, JPG, WEBP up to 50MB</p>
+                          <input id="file-upload" type="file" className="sr-only" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleFileChange} />
                         </>
                       )}
                     </div>
