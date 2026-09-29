@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -29,12 +28,10 @@ export default function HostDashboard() {
   const [registrations, setRegistrations] = useState<{ [key: string]: any[] }>({});
   const [isLoading, setIsLoading] = useState(true);
   
-  // UI States
   const [activeTabApplicants, setActiveTabApplicants] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'live' | 'pending'>('all');
   
-  // INLINE EDIT STATES
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [isProcessingEdit, setIsProcessingEdit] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -48,6 +45,9 @@ export default function HostDashboard() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
+        router.push('/auth?next=/host');
+      } else if (currentUser.isAnonymous) {
+        alert("You need to create a free account to use this feature!");
         router.push('/auth?next=/host');
       } else {
         setUser(currentUser);

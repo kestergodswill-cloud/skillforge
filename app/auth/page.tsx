@@ -9,7 +9,8 @@ import {
   HiOutlineEnvelope, 
   HiOutlineLockClosed,
   HiOutlineEye,      
-  HiOutlineEyeSlash  
+  HiOutlineEyeSlash,
+  HiOutlineUser
 } from 'react-icons/hi2';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
@@ -21,7 +22,8 @@ import {
   signInWithPopup,
   RecaptchaVerifier,
   signInWithPhoneNumber,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  signInAnonymously
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
@@ -34,7 +36,6 @@ declare global {
 }
 
 const COUNTRY_CODES = [
-  // AFRICA
   { code: '+213', flag: '🇩🇿', name: 'Algeria' },
   { code: '+244', flag: '🇦🇴', name: 'Angola' },
   { code: '+229', flag: '🇧🇯', name: 'Benin' },
@@ -89,8 +90,6 @@ const COUNTRY_CODES = [
   { code: '+256', flag: '🇺🇬', name: 'Uganda' },
   { code: '+260', flag: '🇿🇲', name: 'Zambia' },
   { code: '+263', flag: '🇿🇼', name: 'Zimbabwe' },
-
-  // AMERICAS
   { code: '+1',   flag: '🇺🇸', name: 'United States / Canada' },
   { code: '+54',  flag: '🇦🇷', name: 'Argentina' },
   { code: '+591', flag: '🇧🇴', name: 'Bolivia' },
@@ -114,8 +113,6 @@ const COUNTRY_CODES = [
   { code: '+1787',flag: '🇵🇷', name: 'Puerto Rico' },
   { code: '+598', flag: '🇺🇾', name: 'Uruguay' },
   { code: '+58',  flag: '🇻🇪', name: 'Venezuela' },
-
-  // ASIA & MIDDLE EAST
   { code: '+93',  flag: '🇦🇫', name: 'Afghanistan' },
   { code: '+374', flag: '🇦🇲', name: 'Armenia' },
   { code: '+994', flag: '🇦🇿', name: 'Azerbaijan' },
@@ -166,8 +163,6 @@ const COUNTRY_CODES = [
   { code: '+998', flag: '🇺🇿', name: 'Uzbekistan' },
   { code: '+84',  flag: '🇻🇳', name: 'Vietnam' },
   { code: '+967', flag: '🇾🇪', name: 'Yemen' },
-
-  // EUROPE
   { code: '+355', flag: '🇦🇱', name: 'Albania' },
   { code: '+376', flag: '🇦🇩', name: 'Andorra' },
   { code: '+43',  flag: '🇦🇹', name: 'Austria' },
@@ -214,8 +209,6 @@ const COUNTRY_CODES = [
   { code: '+380', flag: '🇺🇦', name: 'Ukraine' },
   { code: '+44',  flag: '🇬🇧', name: 'United Kingdom' },
   { code: '+379', flag: '🇻🇦', name: 'Vatican City' },
-
-  // OCEANIA
   { code: '+61',  flag: '🇦🇺', name: 'Australia' },
   { code: '+679', flag: '🇫🇯', name: 'Fiji' },
   { code: '+686', flag: '🇰🇮', name: 'Kiribati' },
@@ -224,7 +217,7 @@ const COUNTRY_CODES = [
   { code: '+674', flag: '🇳🇷', name: 'Nauru' },
   { code: '+64',  flag: '🇳🇿', name: 'New Zealand' },
   { code: '+680', flag: '🇵🇼', name: 'Palau' },
-  { code: '+675', flag: '🇵🇬', name: 'Papua New Guinea' },
+  { code: '+675', flag: '🇵🇬', name: 'Papua Guinea' },
   { code: '+685', flag: '🇼🇸', name: 'Samoa' },
   { code: '+677', flag: '🇸🇧', name: 'Solomon Islands' },
   { code: '+676', flag: '🇹🇴', name: 'Tonga' },
@@ -281,7 +274,7 @@ export default function AuthPage() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         const urlParams = new URLSearchParams(window.location.search);
-        const nextUrl = urlParams.get('next') || '/account';
+        const nextUrl = urlParams.get('next') || '/';
         router.push(nextUrl);
       }
     });
@@ -304,6 +297,18 @@ export default function AuthPage() {
   const handleAppleAuth = () => {
     if (authMode === 'signup' && !agreedToTerms) return alert("Please agree to the Terms of Service.");
     alert("Apple Sign-In requires Developer Account configuration in Firebase. Coming soon!");
+  };
+
+  const handleGuestLogin = async () => {
+    setLoadingText('ENTERING AS GUEST...');
+    setIsLoading(true);
+    try {
+      await signInAnonymously(auth);
+    } catch (error: any) {
+      console.error("Guest Sign-In Error:", error);
+      alert(`Error: ${error.message.replace('Firebase: ', '')}`);
+      setIsLoading(false);
+    }
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -671,6 +676,16 @@ export default function AuthPage() {
                     1.69-3.21 1.83-2.65 6.06.39 7.42-.76 1.6-1.57 3.12-2.56 3.94zM12.03 7.21c-.15-2.88 2.4-5.22 5.07-5.21.36 3.1-2.73 5.42-5.07 5.21z"/>
                   </svg>
                   Continue with Apple
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={handleGuestLogin}
+                  className="w-full flex items-center justify-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                >
+                  <HiOutlineUser className="text-xl text-emerald-600" />
+                  Explore as Guest
                 </button>
 
                 {authMethod === 'email' ? (

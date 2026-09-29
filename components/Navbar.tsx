@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -406,8 +405,8 @@ export default function Navbar() {
             ) : (
               <Link 
                 href="/auth"
-                className="hidden lg:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-[14px] 
-                font-bold text-slate-700 transition-all hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 whitespace-nowrap cursor-pointer ml-2 shadow-sm">
+                className="hidden lg:inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-[14px] 
+                font-bold text-white transition-all hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 whitespace-nowrap cursor-pointer ml-2 shadow-sm">
                 <span>Sign In</span>
               </Link>
             )}

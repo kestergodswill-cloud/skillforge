@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -49,7 +48,6 @@ export default function AccountPage() {
   const [followList, setFollowList] = useState<any[]>([]);
   const [isLoadingFollow, setIsLoadingFollow] = useState(false);
 
-  // Edit Profile States
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newLocation, setNewLocation] = useState('');
@@ -68,7 +66,12 @@ export default function AccountPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (isSigningOutRef.current) return;
 
-      if (currentUser) {
+      if (!currentUser) {
+        router.push('/auth?next=/account');
+      } else if (currentUser.isAnonymous) {
+        alert("You need to create a free account to use this feature!");
+        router.push('/auth?next=/account');
+      } else {
         setUser(currentUser);
 
         try {
@@ -153,9 +156,6 @@ export default function AccountPage() {
         } finally {
           setIsLoading(false);
         }
-
-      } else {
-        router.push('/auth?next=/account');
       }
     });
     return () => unsubscribe();

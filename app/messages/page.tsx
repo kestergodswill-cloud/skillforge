@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -26,9 +25,13 @@ export default function MessagesInboxPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
       if (!user) {
         router.push('/auth');
+      } else if (user.isAnonymous) {
+        alert("You need to create a free account to use this feature!");
+        router.push('/auth?next=/messages');
+      } else {
+        setCurrentUser(user);
       }
     });
     return () => unsubscribe();
