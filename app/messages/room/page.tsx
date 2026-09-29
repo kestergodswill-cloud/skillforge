@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { db, auth } from '@/lib/firebase';
-import { doc, getDoc, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, setDoc, arrayUnion, arrayRemove, increment, deleteDoc, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, setDoc, arrayUnion, arrayRemove, increment, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
   HiOutlineArrowLeft, 
@@ -23,7 +23,8 @@ import {
   HiOutlineArrowUturnLeft,
   HiOutlineUserGroup,
   HiOutlinePlus,
-  HiPaperAirplane
+  HiPaperAirplane,
+  HiCheck
 } from 'react-icons/hi2';
 
 function ChatRoomContent() {
@@ -32,7 +33,6 @@ function ChatRoomContent() {
   const chatId = searchParams.get('id');
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
   const [isGroup, setIsGroup] = useState(false);
   const [groupData, setGroupData] = useState<any>(null);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
@@ -192,7 +192,7 @@ function ChatRoomContent() {
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('createdAt', 'asc'));
     
-    const unsubscribeMsg = onSnapshot(q, (snapshot) => {
+    const unsubscribeMsg = onSnapshot(q, async (snapshot) => {
       const fetchedMessages = snapshot.docs.map(document => ({
         id: document.id,
         ...document.data()
@@ -202,6 +202,26 @@ function ChatRoomContent() {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
+
+      const batch = writeBatch(db);
+      let hasUpdates = false;
+
+      snapshot.docs.forEach((docSnap) => {
+        const msgData = docSnap.data();
+        if (msgData.senderId !== currentUser.uid) {
+          if (msgData.status !== 'read') {
+            batch.update(doc(db, 'chats', chatId, 'messages', docSnap.id), { status: 'read' });
+            hasUpdates = true;
+          }
+        } else if (msgData.status === 'sent') {
+          batch.update(doc(db, 'chats', chatId, 'messages', docSnap.id), { status: 'delivered' });
+          hasUpdates = true;
+        }
+      });
+
+      if (hasUpdates) {
+        await batch.commit().catch(err => console.error("Batch status update error:", err));
+      }
     });
 
     return () => {
@@ -308,6 +328,7 @@ function ChatRoomContent() {
       await addDoc(collection(db, 'chats', chatId, 'messages'), {
         text: messageText,
         type: 'text',
+        status: isRecipientOnline ? 'delivered' : 'sent',
         senderId: currentUser.uid,
         createdAt: serverTimestamp(),
         ...replyData
@@ -355,6 +376,7 @@ function ChatRoomContent() {
         text: msgType === 'file' ? file.name : '',
         mediaUrl: downloadUrl,
         type: msgType,
+        status: isRecipientOnline ? 'delivered' : 'sent',
         senderId: currentUser.uid,
         createdAt: serverTimestamp(),
         ...replyData
@@ -393,6 +415,7 @@ function ChatRoomContent() {
             text: locationUrl,
             mediaUrl: '',
             type: 'location',
+            status: isRecipientOnline ? 'delivered' : 'sent',
             senderId: currentUser?.uid,
             createdAt: serverTimestamp(),
             ...replyData
@@ -442,6 +465,7 @@ function ChatRoomContent() {
         text: locationUrl,
         mediaUrl: displayName, 
         type: 'location',
+        status: isRecipientOnline ? 'delivered' : 'sent',
         senderId: currentUser?.uid,
         createdAt: serverTimestamp(),
         ...replyData
@@ -504,6 +528,7 @@ function ChatRoomContent() {
         text: '',
         mediaUrl: downloadUrl,
         type: 'audio',
+        status: isRecipientOnline ? 'delivered' : 'sent',
         senderId: currentUser.uid,
         createdAt: serverTimestamp(),
         ...replyData
@@ -799,6 +824,18 @@ function ChatRoomContent() {
                       <span className="whitespace-pre-wrap block leading-relaxed text-[14px] sm:text-[15px]">{msg.text}</span>
                     )}
                   </div>
+
+                  {isMine && (
+                    <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-400 dark:text-slate-500 font-medium px-1">
+                      {msg.status === 'read' ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">Seen</span>
+                      ) : msg.status === 'delivered' ? (
+                        <span>Delivered</span>
+                      ) : (
+                        <span>Sent</span>
+                      )}
+                    </div>
+                  )}
 
                   {isMenuOpen && (
                     <div className="mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl overflow-hidden flex flex-col w-44 z-10 transition-all animate-in fade-in zoom-in-95 duration-100 relative">

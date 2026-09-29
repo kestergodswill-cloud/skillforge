@@ -197,11 +197,16 @@ export default function AccountPage() {
     setUploadingImage(true);
 
     try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET;
+
+      if (!cloudName || !uploadPreset) {
+        throw new Error("Cloudinary configuration missing.");
+      }
+
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('upload_preset', 'YOUR_UNSIGNED_PRESET_NAME'); 
-
-      const cloudName = 'YOUR_CLOUDINARY_CLOUD_NAME'; 
+      formData.append('upload_preset', uploadPreset); 
 
       const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
