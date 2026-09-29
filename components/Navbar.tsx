@@ -18,17 +18,10 @@ import {
   HiOutlineMoon,
   HiArrowRightOnRectangle,
   HiChevronDown,
-  HiOutlineHeart,
   HiOutlineBell,
   HiOutlineShieldCheck,
-  HiOutlineChatBubbleOvalLeftEllipsis,
-  HiOutlineQuestionMarkCircle
+  HiOutlineChatBubbleOvalLeftEllipsis
 } from 'react-icons/hi2';
-import { 
-  MdOutlineHealthAndSafety, 
-  MdOutlineVolunteerActivism
-} from 'react-icons/md';
-import { LuBookOpen } from 'react-icons/lu';
 
 export default function Navbar() {
   const router = useRouter();
@@ -349,8 +342,8 @@ export default function Navbar() {
             {user && (
               <Link
                 href="/host"
-                className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2.5 ml-2 text-[13px] font-bold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 whitespace-nowrap cursor-pointer">
-                <HiOutlineSparkles className="text-sm" />
+                className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3.5 py-2 ml-2 text-[12px] font-bold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 whitespace-nowrap cursor-pointer">
+                <HiOutlineSparkles className="text-xs" />
                 <span>Host / Publish</span>
               </Link>
             )}
@@ -405,7 +398,7 @@ export default function Navbar() {
             ) : (
               <Link 
                 href="/auth"
-                className="hidden lg:inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-[14px] 
+                className="hidden lg:inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-[12px] 
                 font-bold text-white transition-all hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 whitespace-nowrap cursor-pointer ml-2 shadow-sm">
                 <span>Sign In</span>
               </Link>
@@ -471,27 +464,27 @@ export default function Navbar() {
 
               <Link href="/skills" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px]
                    font-bold text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800 cursor-pointer">
-                <MdOutlineVolunteerActivism className="text-xl text-emerald-600 shrink-0" /> Explore Skills
+                Explore Skills
               </Link>
 
               <Link href="/health-and-safety" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 
                     text-[15px] font-bold text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800 cursor-pointer">
-                <MdOutlineHealthAndSafety className="text-xl text-rose-500 shrink-0" /> Health & Life-Saving
+                Health & Life-Saving
               </Link>
 
               <Link href="/cleanups-workouts" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 
                     text-[15px] font-bold text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800 cursor-pointer">
-                <HiOutlineHeart className="text-xl text-blue-500 shrink-0" /> Local Activities
+                Local Activities
               </Link>
 
               <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] 
                     font-bold text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800 cursor-pointer">
-                <LuBookOpen className="text-xl text-slate-500 shrink-0" /> About
+                About
               </Link>
 
               <Link href="/faqs" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] 
                     font-bold text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800 cursor-pointer">
-                <HiOutlineQuestionMarkCircle className="text-xl text-slate-500 shrink-0" /> FAQs
+                FAQs
               </Link>
 
               {user ? (

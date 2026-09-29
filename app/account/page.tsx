@@ -744,7 +744,7 @@ export default function AccountPage() {
                               <HiOutlineUser className="text-sm text-slate-400" />
                             </div>
                             <div>
-                              <Link href={`/profile/${applicant.userId}`} className="text-[13px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors block leading-none">
+                              <Link href={`/host/${applicant.userId}`} className="text-[13px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors block leading-none">
                                 {applicant.fullName}
                               </Link>
                               <a href={`tel:${applicant.phone}`} className="text-[11px] text-slate-500 mt-1 block leading-none hover:text-emerald-600 transition-colors">
@@ -804,7 +804,7 @@ export default function AccountPage() {
               ) : (
                 <div className="space-y-2">
                   {followList.map((userItem) => (
-                    <Link href={`/profile/${userItem.id}`} key={userItem.id} onClick={() => setFollowModalType(null)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
+                    <Link href={`/host/${userItem.id}`} key={userItem.id} onClick={() => setFollowModalType(null)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
                       <img src={userItem.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(userItem.name || 'User')}&background=047857&color=fff`} alt={userItem.name} className="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
                       <div className="flex-1 min-w-0">
                         <h4 className="text-[14px] font-bold text-slate-900 dark:text-white truncate">{userItem.name}</h4>
