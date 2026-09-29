@@ -29,12 +29,10 @@ export default function HostDashboard() {
   const [registrations, setRegistrations] = useState<{ [key: string]: any[] }>({});
   const [isLoading, setIsLoading] = useState(true);
   
-  // UI States
   const [activeTabApplicants, setActiveTabApplicants] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'live' | 'pending'>('all');
   
-  // INLINE EDIT STATES
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [isProcessingEdit, setIsProcessingEdit] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -186,7 +184,7 @@ export default function HostDashboard() {
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col justify-between font-sans transition-colors duration-300">
       <Navbar />
-      
+
       <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-6 sm:pt-8 px-5 sm:px-6">
         
         <div className="max-w-4xl mx-auto mb-6 lg:max-w-none">

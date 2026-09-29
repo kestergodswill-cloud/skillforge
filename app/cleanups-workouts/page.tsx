@@ -1,197 +1,279 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { HiOutlineHeart, HiOutlineUserGroup, HiOutlineMapPin, HiOutlineCalendar, 
-        HiOutlineMagnifyingGlass, HiOutlineCheckBadge } from 'react-icons/hi2';
-
-const eventsList = [
-  {
-    title: "Saturday Morning Community Fitness Bootcamp",
-    category: "Group Workout",
-    schedule: "Every Saturday • 6:30 AM",
-    location: "Central Community Field, Agbor",
-    city: "Agbor",
-    description: "Start your weekend right with an energizing group cardio and bodyweight fitness session open to all ages and fitness levels.",
-    organizer: "SkillForge Wellness Club",
-    highlights: ["Certified fitness instructor", "Hydration station provided", "All fitness levels welcome"]
-  },
-  {
-    title: "Neighborhood Eco-Sanitation & Tree Planting Drive",
-    category: "Cleanup & Green Initiative",
-    schedule: "First Saturday of the Month • 7:00 AM",
-    location: "Main Market Road, Ikeja, Lagos",
-    city: "Lagos",
-    description: "Join local community members to clean up drainage pathways, properly dispose of recyclable waste, and plant shade trees along major streets.",
-    organizer: "Green Lagos Initiative",
-    highlights: ["Gloves & sanitation tools provided", "Community service certificate", "Refreshments after cleanup"]
-  },
-  {
-    title: "Sunrise Jogging & Aerobics Club",
-    category: "Group Workout",
-    schedule: "Tuesdays & Thursdays • 5:45 AM",
-    location: "Delta State University Sub-Urban Area, Delta",
-    city: "Delta",
-    description: "A refreshing morning jog and stretching session designed to build cardiovascular endurance and foster strong community ties.",
-    organizer: "Delta Active Youth",
-    highlights: ["Safe group pacing", "Stretching & mobility routine", "Encouraging community"]
-  },
-  {
-    title: "Community Creek & Street Waste Clearance",
-    category: "Cleanup & Green Initiative",
-    schedule: "Bi-Weekly Saturday • 8:00 AM",
-    location: "Abuja Municipal Community Zone",
-    city: "Abuja",
-    description: "Collaborative neighborhood cleanup to clear blocked waterways, prevent flooding during rainy seasons, and promote proper hygiene habits.",
-    organizer: "Abuja Clean Streets Taskforce",
-    highlights: ["Safety briefing & gear included", "Waste segregation training", "Impact award recognition"]
-  }
-];
+import QuickRegistrationModal from '@/components/QuickRegistrationModal';
+import { auth, db } from '@/lib/firebase';
+import { collection, getDocs, query, addDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  HiOutlineUserGroup, 
+  HiOutlineCalendar, 
+  HiOutlineMagnifyingGlass,
+  HiOutlineCheckBadge
+} from 'react-icons/hi2';
 
 export default function CleanupsWorkoutsPage() {
+  const router = useRouter();
   const [searchLocation, setSearchLocation] = useState('');
+  
+  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredEvents = eventsList.filter(event => 
-    event.city.toLowerCase().includes(searchLocation.toLowerCase()) ||
-    event.location.toLowerCase().includes(searchLocation.toLowerCase()) ||
-    event.title.toLowerCase().includes(searchLocation.toLowerCase()) ||
-    event.category.toLowerCase().includes(searchLocation.toLowerCase())
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [selectedEventTitle, setSelectedEventTitle] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const programsRef = collection(db, 'programs');
+        const snapshot = await getDocs(programsRef);
+        
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).filter((item: any) => 
+          (item.type === 'workout' || item.type === 'cleanup') && 
+          (item.status === 'approved' || item.status === 'live')
+        );
+        
+        setLiveEvents(data);
+      } catch (error) {
+        console.error("Error fetching local activities:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  const filteredEvents = useMemo(() => {
+    if (!searchLocation.trim()) return liveEvents;
+    const searchLower = searchLocation.toLowerCase();
+    
+    return liveEvents.filter(event => 
+      event.city?.toLowerCase().includes(searchLower) ||
+      event.location?.toLowerCase().includes(searchLower) ||
+      event.title?.toLowerCase().includes(searchLower) ||
+      event.type?.toLowerCase().includes(searchLower) ||
+      event.organizer?.toLowerCase().includes(searchLower)
+    );
+  }, [liveEvents, searchLocation]);
+
+  const handleJoinClick = (event: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      router.push('/auth?next=/cleanups-workouts');
+      return;
+    }
+    if (event.hostId === currentUser.uid) {
+      alert("You are the host of this event.");
+      return;
+    }
+    setSelectedEventId(event.id);
+    setSelectedEventTitle(event.title);
+    setIsSuccess(false);
+    setIsModalOpen(true);
+  };
+
+  const handleFormSubmit = async (details: { fullName: string; phone: string; note?: string }) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !selectedEventId) return;
+
+    setIsProcessing(true);
+    try {
+      await addDoc(collection(db, 'registrations'), {
+        programId: selectedEventId,
+        userId: currentUser.uid,
+        fullName: details.fullName,
+        phone: details.phone,
+        note: details.note || '',
+        email: currentUser.email,
+        status: 'pending',
+        appliedAt: serverTimestamp()
+      });
+
+      setIsSuccess(true);
+    } catch (error) {
+      console.error("Error registering for activity:", error);
+      alert("Failed to submit registration. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const renderSkeletons = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10 mt-2">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="flex flex-col gap-2 animate-pulse">
+          <div className="aspect-[4/3] w-full rounded-xl bg-slate-200 dark:bg-slate-800"></div>
+          <div className="flex justify-between items-start mt-1">
+            <div className="h-4 w-1/3 bg-slate-200 dark:bg-slate-800 rounded"></div>
+            <div className="h-4 w-1/4 bg-slate-200 dark:bg-slate-800 rounded"></div>
+          </div>
+          <div className="h-3 w-3/4 bg-slate-200 dark:bg-slate-800 rounded mt-1"></div>
+          <div className="h-3 w-1/2 bg-slate-200 dark:bg-slate-800 rounded"></div>
+          <div className="h-10 w-full bg-slate-200 dark:bg-slate-800 rounded-lg mt-2"></div>
+        </div>
+      ))}
+    </div>
   );
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between">
-      <div>
-        <Navbar />
+    <main className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col font-sans transition-colors duration-300">
+      <Navbar />
 
-        {/* Hero Section */}
-        <section className="bg-slate-900 text-white py-16 sm:py-24 px-6 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.15),transparent_50%)]"></div>
-          <div className="mx-auto max-w-4xl text-center space-y-6 relative z-10">
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold tracking-widest text-emerald-400 uppercase
-                 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-800">
-              <HiOutlineHeart className="text-sm" /> Community Fitness & Cleanups
-            </span>
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-              Local Cleanups & Group Workouts
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
-              Find scheduled neighborhood cleanups, group workouts, and fitness meetups happening right in your local area. Stay active and keep your environment clean together.
-            </p>
+      <QuickRegistrationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmitDetails={handleFormSubmit}
+        title="Local Activity Registration"
+        itemTitle={selectedEventTitle}
+        isProcessing={isProcessing}
+        isSuccess={isSuccess}
+      />
 
-            {/* Location / Keyword Search */}
-            <div className="relative max-w-md mx-auto pt-2">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400 text-lg mt-2">
-                <HiOutlineMagnifyingGlass />
-              </span>
-              <input
-                type="text"
-                placeholder="Search by city or activity (e.g., Agbor, Lagos, Workout)..."
-                value={searchLocation}
-                onChange={(e) => setSearchLocation(e.target.value)}
-                className="w-full rounded-full border border-slate-700 bg-slate-800/90 py-3.5 pl-11 pr-4 text-xs font-medium
-                 text-white shadow-lg outline-none transition-all focus:border-emerald-500 focus:ring-2
-                  focus:ring-emerald-500/30 placeholder:text-slate-400"
-              />
-            </div>
+      <div className="flex-1 w-full max-w-[1400px] mx-auto px-5 pt-[88px] sm:pt-[104px] pb-24">
+        
+        <div className="max-w-3xl mx-auto text-center mb-12">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
+            Local Cleanups & Group Workouts
+          </h1>
+          
+          <p className="text-[15px] sm:text-[16px] text-slate-600 dark:text-slate-400 mt-3 font-medium leading-relaxed">
+            Find scheduled neighborhood cleanups, group workouts, and fitness meetups happening right in your local area.
+          </p>
+
+          <div className="relative max-w-lg mx-auto mt-8">
+            <HiOutlineMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by city, activity, or host..."
+              value={searchLocation}
+              onChange={(e) => setSearchLocation(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-3.5 pl-11 pr-4 text-[14px] text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-emerald-500/50 transition-all shadow-sm"
+            />
           </div>
-        </section>
+        </div>
 
-        {/* Events Grid */}
-        <section className="mx-auto max-w-7xl px-6 py-16">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {filteredEvents.length > 0 ? (
-              filteredEvents.map((event, idx) => (
-                <div key={idx} className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm flex flex-col 
-                              justify-between hover:border-emerald-500/50 transition-all">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold tracking-wider uppercase bg-emerald-50 text-emerald-700 px-3 
-                            py-1 rounded-full border border-emerald-200">
-                        {event.category}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
-                        <HiOutlineCalendar className="text-emerald-600" /> {event.schedule}
-                      </span>
-                    </div>
-
-                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">
-                      {event.title}
-                    </h3>
-
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      {event.description}
-                    </p>
-
-                    <div className="pt-2 space-y-2 border-t border-slate-100">
-                      <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Highlights:</p>
-                      <ul className="space-y-1.5">
-                        {event.highlights.map((item, i) => (
-                          <li key={i} className="flex items-center gap-2 text-xs text-slate-600">
-                            <HiOutlineCheckBadge className="text-emerald-600 text-sm shrink-0" />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
+        <div>
+          {isLoading ? (
+            renderSkeletons()
+          ) : filteredEvents.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
+              {filteredEvents.map((event) => (
+                <div key={event.id} className="group flex flex-col cursor-pointer" onClick={() => handleJoinClick(event)}>
+                  
+                  <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 mb-3 border border-slate-200/50 dark:border-slate-700/50">
+                    <img 
+                      src={event.mediaUrl || "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"} 
+                      alt={event.title} 
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    
+                    <div className={`absolute top-3 left-3 px-2 py-1 rounded text-[10px] font-extrabold shadow-sm uppercase tracking-wider z-10 ${
+                      event.type === 'workout' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-emerald-600 text-white'
+                    }`}>
+                      {event.type === 'workout' ? 'Workout' : 'Cleanup'}
                     </div>
                   </div>
 
-                 <div className="pt-6 mt-6 border-t border-slate-100 flex flex-row items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-slate-500 flex items-center gap-1 truncate">
-                      <HiOutlineMapPin className="text-emerald-600 shrink-0" /> <span className="truncate">{event.location}</span>
-                    </span>
-                    <a
-                      href="/auth"
-                      className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-5 py-2 text-xs font-bold
-                       text-white hover:bg-emerald-600 transition-colors shadow-sm shrink-0 whitespace-nowrap">
-                      Join Event
-                    </a>
-                  </div>
+                  <div className="flex flex-col flex-1 px-0.5">
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate">
+                        {event.location || event.city || 'Location TBA'}
+                      </h3>
+                      <span className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                        <HiOutlineCalendar className="text-emerald-600 dark:text-emerald-500" />
+                        {event.schedule || 'Dates TBA'}
+                      </span>
+                    </div>
 
+                    <p className="text-[14px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">{event.title}</p>
+                    
+                    <div className="mt-1">
+                      <Link 
+                        href={`/profile/${event.hostId}`} 
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                      >
+                        Organized by <span className="font-semibold">{event.organizer || 'Community Member'}</span>
+                      </Link>
+                    </div>
+
+                    {event.audience && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                          <HiOutlineCheckBadge className="text-emerald-600 dark:text-emerald-500" />
+                          {event.audience}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="mt-4 pt-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handleJoinClick(event, e)}
+                        className="w-full rounded-lg py-2.5 text-[13px] font-bold transition-all cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-emerald-600 dark:hover:bg-emerald-500 hover:text-white dark:hover:text-white shadow-sm active:scale-95"
+                      >
+                        Join Activity
+                      </button>
+                    </div>
+
+                  </div>
                 </div>
-              ))
-            ) : (
-              <div className="col-span-2 text-center py-16 bg-white rounded-3xl border border-slate-200 p-8 space-y-4">
-                <p className="text-sm font-semibold text-slate-700">No events found matching "{searchLocation}".</p>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Want to organize a group workout or neighborhood cleanup in your area? Connect with our coordinators to
-                   get started.
-                </p>
-                <a
-                  href="/auth"
-                  className="inline-block rounded-full bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white
-                   hover:bg-emerald-500 transition-colors">
-                  Propose New Event
-                </a>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="bg-emerald-900 text-white py-16 px-6 text-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.3),transparent_70%)]"></div>
-          <div className="mx-auto max-w-2xl space-y-4 relative z-10">
-            <div className="inline-flex p-3 bg-emerald-950 text-emerald-400 rounded-full text-xl border border-emerald-800">
-              <HiOutlineUserGroup />
+              ))}
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Host a Workout or Cleanup in Your Community
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-200">
-              Passionate about fitness or environmental cleanliness? Partner with SkillForge to list your local group 
-              exercise or street sanitation drive for free.
-            </p>
-            <div className="pt-2">
-              <a 
-                href="/auth"
-                className="inline-block rounded-full bg-white text-slate-900 px-8 py-3 text-xs font-bold
-                 hover:bg-emerald-50 transition-colors shadow-lg">
-                Register as Event Host
-              </a>
+          ) : (
+            <div className="text-center py-24 max-w-md mx-auto">
+              <HiOutlineMagnifyingGlass className="mx-auto text-4xl text-slate-300 dark:text-slate-700 mb-3" />
+              <p className="text-[16px] text-slate-900 dark:text-white font-bold mb-1">No activities found</p>
+              <p className="text-[14px] text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                We couldn't find any exact matches for "{searchLocation}".
+              </p>
+              <Link
+                href="/host"
+                className="inline-block rounded-xl bg-emerald-600 px-6 py-3 text-[13px] font-bold text-white hover:bg-emerald-500 transition-colors shadow-sm cursor-pointer"
+              >
+                Host a local event
+              </Link>
             </div>
-          </div>
-        </section>
+          )}
+        </div>
       </div>
+      
+      <section className="bg-emerald-50 dark:bg-slate-900 py-16 px-5 border-t border-emerald-100 dark:border-slate-800 text-center">
+        <div className="mx-auto max-w-2xl space-y-4">
+          <div className="inline-flex p-3 bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 rounded-full text-xl shadow-sm border border-emerald-100 dark:border-slate-700">
+            <HiOutlineUserGroup />
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Host a Workout or Cleanup
+          </h2>
+          <p className="text-[14px] sm:text-[15px] text-slate-600 dark:text-slate-400 leading-relaxed max-w-md mx-auto">
+            Passionate about fitness or environmental cleanliness? Partner with SkillForge to list your local group exercise or street sanitation drive for free.
+          </p>
+          <div className="pt-2">
+            <Link 
+              href="/host"
+              className="inline-block rounded-lg bg-emerald-600 text-white px-6 py-3 text-[14px] font-bold hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer"
+            >
+              Host an Event Now
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <Footer/>
     </main>

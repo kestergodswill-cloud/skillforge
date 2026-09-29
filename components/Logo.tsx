@@ -3,10 +3,25 @@ import React from 'react';
 interface LogoProps {
   size?: number;
   className?: string;
-  theme?: 'light' | 'dark';
+  theme?: 'light' | 'dark' | 'auto';
 }
 
-export default function Logo({ size = 44, className = "", theme = "light" }: LogoProps) {
+export default function Logo({ size = 44, className = "", theme = "auto" }: LogoProps) {
+  
+  let textClass = 'text-slate-900 dark:text-white';
+  let highlightClass = 'text-emerald-700 dark:text-emerald-400';
+  let subClass = 'text-slate-500 dark:text-slate-400';
+
+  if (theme === 'light') {
+    textClass = 'text-slate-900';
+    highlightClass = 'text-emerald-700';
+    subClass = 'text-slate-500';
+  } else if (theme === 'dark') {
+    textClass = 'text-white';
+    highlightClass = 'text-emerald-400';
+    subClass = 'text-slate-400';
+  }
+
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <svg
@@ -45,11 +60,10 @@ export default function Logo({ size = 44, className = "", theme = "light" }: Log
       </svg>
 
       <div className="flex flex-col leading-tight">
-        <span className={`text-xl font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-          Skill<span className={theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}>Forge</span>
+        <span className={`text-xl font-black tracking-tight ${textClass}`}>
+          Skill<span className={highlightClass}>Forge</span>
         </span>
-        <span className={`text-[10px] font-semibold tracking-wider uppercase ${theme === 'dark' ? 'text-slate-400' : 
-              'text-slate-500'}`}>
+        <span className={`text-[10px] font-semibold tracking-wider uppercase ${subClass}`}>
           Community Hub
         </span>
       </div>
