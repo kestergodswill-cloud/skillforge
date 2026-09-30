@@ -19,7 +19,7 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   GoogleAuthProvider, 
-  signInWithPopup,
+  signInWithRedirect,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   sendPasswordResetEmail,
@@ -287,7 +287,7 @@ export default function AuthPage() {
     setIsLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (error: any) {
       console.error("Google Sign-In Error:", error);
       alert(`Google Sign-In Error: ${error.message || error.toString()}`);
