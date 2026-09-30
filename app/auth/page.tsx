@@ -19,7 +19,7 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   GoogleAuthProvider, 
-  signInWithRedirect,
+  signInWithPopup,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   sendPasswordResetEmail,
@@ -282,16 +282,19 @@ export default function AuthPage() {
   }, [router]);
 
   const handleGoogleAuth = async () => {
-    if (authMode === 'signup' && !agreedToTerms) return alert("Please agree to the Terms of Service.");
-    setLoadingText('CONNECTING TO GOOGLE...');
-    setIsLoading(true);
+    if (authMode === 'signup' && !agreedToTerms) {
+      alert("Please agree to the Terms of Service.");
+      return;
+    }
+    
+    // Safely trigger Google Auth immediately (Bypasses Safari Popup Blocker)
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      await signInWithPopup(auth, provider);
+      // Once successful, onAuthStateChanged in useEffect will handle the routing
     } catch (error: any) {
       console.error("Google Sign-In Error:", error);
-      alert(`Google Sign-In Error: ${error.message || error.toString()}`);
-      setIsLoading(false);
+      alert(`Google Sign-In Error: ${error.message.replace('Firebase: ', '')}`);
     }
   };
 
