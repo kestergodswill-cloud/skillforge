@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,15 +12,12 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
   HiOutlineUserPlus,
   HiOutlineUserMinus,
-  HiOutlineEnvelope,
-  HiUsers,
   HiCheckBadge,
   HiOutlineMapPin,
   HiStar,
   HiChevronLeft,
   HiOutlineXMark,
-  HiOutlinePencil,
-  HiOutlineGlobeAlt
+  HiOutlinePencil
 } from 'react-icons/hi2';
 
 export default function UserProfilePage() {
@@ -47,6 +43,11 @@ export default function UserProfilePage() {
   const [followModalType, setFollowModalType] = useState<'followers' | 'following' | null>(null);
   const [followList, setFollowList] = useState<any[]>([]);
   const [isLoadingFollow, setIsLoadingFollow] = useState(false);
+
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [newReviewText, setNewReviewText] = useState('');
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -224,6 +225,42 @@ export default function UserProfilePage() {
     }
   };
 
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) {
+      alert("Please sign in to leave a review.");
+      router.push('/auth');
+      return;
+    }
+    if (!newReviewText.trim()) return;
+
+    setIsSubmittingReview(true);
+    try {
+      const reviewData = {
+        hostId: profileId,
+        reviewerId: currentUser.uid,
+        author: currentUser.displayName || currentUser.email?.split('@')[0] || 'Community Member',
+        text: newReviewText.trim(),
+        rating: Number(newReviewRating),
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        createdAt: serverTimestamp()
+      };
+
+      await addDoc(collection(db, 'reviews'), reviewData);
+
+      setAllReviews(prev => [reviewData, ...prev]);
+      setNewReviewText('');
+      setNewReviewRating(5);
+      setReviewModalOpen(false);
+      alert("Review posted successfully!");
+    } catch (error) {
+      console.error("Error posting review:", error);
+      alert("Failed to submit review.");
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
   const openFollowModal = async (type: 'followers' | 'following') => {
     setFollowModalType(type);
     setIsLoadingFollow(true);
@@ -325,7 +362,7 @@ export default function UserProfilePage() {
             
             <button 
               onClick={() => router.back()}
-              className="hidden sm:flex absolute top-4 left-4 sm:top-5 sm:left-5 z-50 items-center justify-center h-10 w-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md text-white transition-colors cursor-pointer border border-white/10"
+              className="hidden sm:flex absolute top-20 left-4 sm:top-24 sm:left-6 z-30 items-center justify-center h-10 w-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md text-white transition-colors cursor-pointer border border-white/10 shadow-md"
               aria-label="Go Back"
             >
               <HiChevronLeft className="text-2xl pr-0.5" />
@@ -371,14 +408,18 @@ export default function UserProfilePage() {
             </div>
 
             <div className="mb-6">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
                 <h1 className="text-[16px] sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
                   {profileUser.name || 'Community Member'}
                 </h1>
-                {profileUser.rating > 0 && (
-                  <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                    <HiStar className="text-amber-400" /> {profileUser.rating}
-                  </div>
+
+                {currentUser?.uid !== profileId && (
+                  <button 
+                    onClick={() => setReviewModalOpen(true)}
+                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-sm"
+                  >
+                    <HiStar className="text-amber-400 text-sm" /> Leave review
+                  </button>
                 )}
               </div>
 
@@ -531,7 +572,7 @@ export default function UserProfilePage() {
                         return (
                           <div key={review.id} className="flex flex-col gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-4">
                             <div className="flex items-start justify-between">
-                              <Link href={`/profile/${review.reviewerId}`} className="flex items-center gap-2.5 group">
+                              <Link href={`/host/${review.reviewerId}`} className="flex items-center gap-2.5 group">
                                 <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 font-bold border border-slate-200 dark:border-slate-700">
                                   {review.author?.charAt(0) || 'U'}
                                 </div>
@@ -587,6 +628,56 @@ export default function UserProfilePage() {
         </div>
       </div>
 
+      {reviewModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-xl p-6 border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Leave a Review</h3>
+              <button onClick={() => setReviewModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer">
+                <HiOutlineXMark className="text-xl" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReview} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Rating</label>
+                <select 
+                  value={newReviewRating} 
+                  onChange={(e) => setNewReviewRating(Number(e.target.value))}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value={5}>⭐⭐⭐⭐⭐ (5/5)</option>
+                  <option value={4}>⭐⭐⭐⭐ (4/5)</option>
+                  <option value={3}>⭐⭐⭐ (3/5)</option>
+                  <option value={2}>⭐⭐ (2/5)</option>
+                  <option value={1}>⭐ (1/5)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Your Review</label>
+                <textarea 
+                  rows={4}
+                  required
+                  value={newReviewText}
+                  onChange={(e) => setNewReviewText(e.target.value)}
+                  placeholder="Share your experience with this host..."
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isSubmittingReview || !newReviewText.trim()}
+                className="w-full py-3 bg-emerald-600 text-white font-bold text-sm rounded-xl hover:bg-emerald-500 transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
+              >
+                {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {followModalType && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 transition-opacity font-sans">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-t-[2rem] sm:rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-slate-100 dark:border-slate-800">
@@ -618,7 +709,7 @@ export default function UserProfilePage() {
                 <div className="space-y-1">
                   {followList.map((userItem) => (
                     <Link 
-                      href={`/profile/${userItem.id}`} 
+                      href={`/host/${userItem.id}`} 
                       key={userItem.id}
                       onClick={() => setFollowModalType(null)}
                       className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
