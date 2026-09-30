@@ -19,7 +19,9 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   GoogleAuthProvider, 
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  getAdditionalUserInfo,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   sendPasswordResetEmail,
@@ -271,6 +273,35 @@ export default function AuthPage() {
   }, [authMode]);
 
   useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const { isNewUser } = getAdditionalUserInfo(result) || {};
+          
+          if (isNewUser && result.user.email) {
+            const defaultName = result.user.displayName || result.user.email.split('@')[0];
+            await fetch('/api/welcome', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: result.user.email,
+                name: defaultName
+              }),
+            });
+          }
+        }
+      } catch (error: any) {
+        console.error("Redirect Error:", error);
+      }
+    };
+    
+    handleRedirectResult();
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         const urlParams = new URLSearchParams(window.location.search);
@@ -287,13 +318,10 @@ export default function AuthPage() {
       return;
     }
     
-    // Safely trigger Google Auth immediately (Bypasses Safari Popup Blocker)
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      // Once successful, onAuthStateChanged in useEffect will handle the routing
+      await signInWithRedirect(auth, provider);
     } catch (error: any) {
-      console.error("Google Sign-In Error:", error);
       alert(`Google Sign-In Error: ${error.message.replace('Firebase: ', '')}`);
     }
   };
@@ -309,7 +337,6 @@ export default function AuthPage() {
     try {
       await signInAnonymously(auth);
     } catch (error: any) {
-      console.error("Guest Sign-In Error:", error);
       alert(`Error: ${error.message.replace('Firebase: ', '')}`);
       setIsLoading(false);
     }
@@ -325,7 +352,21 @@ export default function AuthPage() {
     try {
       if (authMode === 'signup') {
         if (!allowNewRegistrations) throw new Error("Registrations are currently closed.");
-        await createUserWithEmailAndPassword(auth, email, password);
+        
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const defaultName = email.split('@')[0];
+        
+        await fetch('/api/welcome', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: userCredential.user.email,
+            name: defaultName 
+          }),
+        });
+
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -381,7 +422,6 @@ export default function AuthPage() {
       setShowOtpInput(true);
       setIsLoading(false);
     } catch (error: any) {
-      console.error("SMS Error:", error);
       alert(`Firebase says: ${error.message}`);
       setIsLoading(false);
     }

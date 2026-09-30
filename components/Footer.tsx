@@ -1,14 +1,32 @@
-
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import Logo from './Logo';
-import { HiOutlineEnvelope, HiOutlinePhone, HiOutlineMapPin } from 'react-icons/hi2';
+import { HiOutlineEnvelope, HiOutlinePhone, HiOutlineMapPin, HiCheckCircle } from 'react-icons/hi2';
 
 export default function Footer() {
-  const handleSubscribe = (e: React.FormEvent) => {
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Thank you for subscribing to SkillForge updates!");
+    if (!email) return;
+
+    setIsSubmitting(true);
+    
+    // Simulating a quick network request so the button shows a loading state
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    
+    setIsSubmitting(false);
+    setIsSubscribed(true);
+    setEmail('');
+
+    // Reset the form back to normal after 5 seconds
+    setTimeout(() => {
+      setIsSubscribed(false);
+    }, 5000);
   };
 
   return (
@@ -93,15 +111,19 @@ export default function Footer() {
             <ul className="space-y-3 text-[14px] text-slate-400">
               <li className="flex items-center gap-2.5">
                 <HiOutlineEnvelope className="text-lg text-emerald-500 shrink-0" />
-                <span>support@skillforge.africa</span>
+                <a href="mailto:support@skillforge.africa" className="hover:text-emerald-400 transition-colors">
+                  support@skillforge.africa
+                </a>
               </li>
               <li className="flex items-center gap-2.5">
                 <HiOutlinePhone className="text-lg text-emerald-500 shrink-0" />
-                <span>+234 (0) 800 SKILLFORGE</span>
+                <a href="tel:+2348131566614" className="hover:text-emerald-400 transition-colors">
+                  +234 813 156 6614
+                </a>
               </li>
               <li className="flex items-start gap-2.5">
                 <HiOutlineMapPin className="text-lg text-emerald-500 shrink-0 mt-0.5" />
-                <span>Lagos, Delta & Agbor Hubs</span>
+                <span>Lagos, Delta & Abuja Hubs</span>
               </li>
             </ul>
           </div>
@@ -111,20 +133,34 @@ export default function Footer() {
             <p className="text-[14px] text-slate-400">
               Get notified about upcoming free vocational training sessions and health drives near you.
             </p>
-            <form onSubmit={handleSubscribe} className="space-y-2.5">
-              <input
-                type="email"
-                required
-                placeholder="Enter your email..."
-                className="w-full rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-[14px] text-white 
-                outline-none placeholder:text-slate-500 focus:border-emerald-500 transition-colors"
-              />
-              <button
-                type="submit"
-                className="w-full rounded-xl bg-emerald-600 py-3 text-[14px] font-bold text-white transition-all
-                 hover:bg-emerald-500 active:scale-95 cursor-pointer shadow-sm" >
-                Subscribe
-              </button>
+            
+            <form onSubmit={handleSubscribe} className="space-y-2.5 relative">
+              {isSubscribed ? (
+                <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3.5 text-[14px] font-medium text-emerald-400 animate-in fade-in duration-300">
+                  <HiCheckCircle className="text-lg shrink-0" />
+                  <span>Subscribed successfully!</span>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email..."
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-[14px] text-white 
+                    outline-none placeholder:text-slate-500 focus:border-emerald-500 transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full rounded-xl bg-emerald-600 py-3 text-[14px] font-bold text-white transition-all
+                     hover:bg-emerald-500 active:scale-95 cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                  >
+                    {isSubmitting ? 'Subscribing...' : 'Subscribe'}
+                  </button>
+                </>
+              )}
             </form>
           </div>
 
