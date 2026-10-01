@@ -19,6 +19,7 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   GoogleAuthProvider, 
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   getAdditionalUserInfo,
@@ -273,30 +274,6 @@ export default function AuthPage() {
   }, [authMode]);
 
   useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          const { isNewUser } = getAdditionalUserInfo(result) || {};
-          
-          if (isNewUser && result.user.email) {
-            const defaultName = result.user.displayName || result.user.email.split('@')[0];
-            await fetch('/api/welcome', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: result.user.email, name: defaultName }),
-            });
-          }
-        }
-      } catch (error: any) {
-        console.error("Redirect Error:", error);
-      }
-    };
-    
-    handleRedirectResult();
-  }, []);
-
-  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         const urlParams = new URLSearchParams(window.location.search);
@@ -307,6 +284,7 @@ export default function AuthPage() {
     return () => unsubscribe();
   }, [router]);
 
+  // FIXED: Using signInWithPopup with a fallback to signInWithRedirect for mobile reliability
   const handleGoogleAuth = async () => {
     if (authMode === 'signup' && !agreedToTerms) {
       alert("Please agree to the Terms of Service.");
@@ -314,10 +292,29 @@ export default function AuthPage() {
     }
     
     const provider = new GoogleAuthProvider();
+    setIsLoading(true);
+    setLoadingText('CONNECTING TO GOOGLE...');
+
     try {
-      await signInWithRedirect(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const { isNewUser } = getAdditionalUserInfo(result) || {};
+      
+      if (isNewUser && result.user.email) {
+        const defaultName = result.user.displayName || result.user.email.split('@')[0];
+        await fetch('/api/welcome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: result.user.email, name: defaultName }),
+        });
+      }
     } catch (error: any) {
-      alert(`Google Sign-In Error: ${error.message.replace('Firebase: ', '')}`);
+      // If popup is blocked or fails on mobile, fallback safely to redirect
+      try {
+        await signInWithRedirect(auth, provider);
+      } catch (redirectError: any) {
+        alert(`Google Sign-In Error: ${redirectError.message.replace('Firebase: ', '')}`);
+        setIsLoading(false);
+      }
     }
   };
 
@@ -351,7 +348,7 @@ export default function AuthPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const defaultName = email.split('@')[0];
         
-        await fetch('/api/welcome', {
+        const res = await fetch('/api/welcome', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -359,6 +356,8 @@ export default function AuthPage() {
             name: defaultName 
           }),
         });
+        const data = await res.json();
+        console.log("Welcome API result:", data);
 
       } else {
         await signInWithEmailAndPassword(auth, email, password);
