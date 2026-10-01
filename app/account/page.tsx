@@ -18,7 +18,8 @@ import {
   HiOutlineSquares2X2,
   HiOutlineBookmark,
   HiOutlineTicket,
-  HiOutlineCog8Tooth
+  HiOutlineCog8Tooth,
+  HiOutlineEnvelope
 } from 'react-icons/hi2';
 
 export default function AccountPage() {
@@ -45,6 +46,7 @@ export default function AccountPage() {
   const [isLoadingFollow, setIsLoadingFollow] = useState(false);
 
   const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newBio, setNewBio] = useState('');
@@ -69,6 +71,7 @@ export default function AccountPage() {
         setShowGuestModal(true);
       } else {
         setUser(currentUser);
+        setNewEmail(currentUser.email || '');
 
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
@@ -603,6 +606,19 @@ export default function AccountPage() {
               </div>
 
               <div>
+                <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Email Address <span className="text-[11px] font-normal text-slate-400">(Cannot be changed)</span></label>
+                <div className="relative">
+                  <HiOutlineEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base" />
+                  <input 
+                    type="email" 
+                    value={newEmail} 
+                    disabled
+                    className="w-full bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg pl-10 pr-3.5 py-2.5 text-[14px] text-slate-500 dark:text-slate-400 cursor-not-allowed select-none" 
+                  />
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Phone Number</label>
                 <input 
                   type="tel" 
@@ -660,42 +676,42 @@ export default function AccountPage() {
         )}
 
         {activeTab === 'settings' && !showGuestModal && (
-          <div className="px-5 sm:px-8 py-6 max-w-xl mx-auto space-y-6 animate-in fade-in duration-300">
+          <div className="px-5 sm:px-8 py-6 max-w-sm mx-auto space-y-4 animate-in fade-in duration-300">
             
-            <div className="space-y-3">
+            <div className="space-y-2.5">
                <button 
                  onClick={handleSignOut} 
-                 className="w-full px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-[14px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm text-left"
+                 className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-[13px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors cursor-pointer shadow-sm text-left"
                >
                  Log out
                </button>
                
                <button 
                  onClick={() => setShowDeleteWarning(true)} 
-                 className="w-full px-4 py-3 rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-900/10 text-rose-600 text-[14px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors cursor-pointer shadow-sm text-left"
+                 className="w-full px-4 py-2.5 rounded-lg border border-rose-200/60 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-900/10 text-rose-600 text-[13px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors cursor-pointer shadow-sm text-left"
                >
                  Delete account
                </button>
             </div>
 
             {showDeleteWarning && (
-              <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-rose-100 dark:border-rose-900/30 animate-in fade-in zoom-in-95 duration-200">
-                <h4 className="text-[15px] font-bold text-slate-900 dark:text-white mb-2">Delete your account permanently?</h4>
-                <p className="text-[13px] text-slate-500 dark:text-slate-400 mb-5 leading-relaxed">
-                  This action cannot be undone. All your data, events, and registrations will be permanently deleted.
+              <div className="p-5 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-rose-100 dark:border-rose-900/30 animate-in fade-in zoom-in-95 duration-200 shadow-sm">
+                <h4 className="text-[14px] font-bold text-slate-900 dark:text-white mb-1.5">Leaving already?</h4>
+                <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+                  We'll be sad to see you go. Deleting your account will wipe out your hosted events, community connections, and profile data for good.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex items-center gap-2">
                   <button 
                     onClick={handleDeleteAccount} 
-                    className="w-full sm:w-auto px-5 py-2.5 bg-rose-600 text-white text-[13px] font-semibold rounded-lg hover:bg-rose-500 transition-colors cursor-pointer shadow-sm"
+                    className="flex-1 py-2 bg-rose-600 text-white text-[12px] font-semibold rounded-lg hover:bg-rose-500 transition-colors cursor-pointer shadow-sm text-center"
                   >
-                    Yes, delete everything
+                    Yes, delete account
                   </button>
                   <button 
                     onClick={() => setShowDeleteWarning(false)} 
-                    className="w-full sm:w-auto px-5 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[13px] font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                    className="flex-1 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[12px] font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer text-center"
                   >
-                    Cancel
+                    Never mind
                   </button>
                 </div>
               </div>
@@ -786,7 +802,6 @@ export default function AccountPage() {
         </div>
       )}
 
-     
       {followModalType && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-[400px] rounded-2xl shadow-xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">

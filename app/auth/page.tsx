@@ -284,7 +284,6 @@ export default function AuthPage() {
     return () => unsubscribe();
   }, [router]);
 
-  // FIXED: Using signInWithPopup with a fallback to signInWithRedirect for mobile reliability
   const handleGoogleAuth = async () => {
     if (authMode === 'signup' && !agreedToTerms) {
       alert("Please agree to the Terms of Service.");
@@ -301,6 +300,7 @@ export default function AuthPage() {
       
       if (isNewUser && result.user.email) {
         const defaultName = result.user.displayName || result.user.email.split('@')[0];
+        console.log("Google new user signup detected. Calling /api/welcome...");
         await fetch('/api/welcome', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -308,7 +308,6 @@ export default function AuthPage() {
         });
       }
     } catch (error: any) {
-      // If popup is blocked or fails on mobile, fallback safely to redirect
       try {
         await signInWithRedirect(auth, provider);
       } catch (redirectError: any) {
@@ -345,9 +344,13 @@ export default function AuthPage() {
       if (authMode === 'signup') {
         if (!allowNewRegistrations) throw new Error("Registrations are currently closed.");
         
+        console.log("Attempting to create user with email:", email);
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        console.log("Firebase user created successfully:", userCredential.user.email);
+        
         const defaultName = email.split('@')[0];
         
+        console.log("Triggering /api/welcome fetch request...");
         const res = await fetch('/api/welcome', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -356,13 +359,15 @@ export default function AuthPage() {
             name: defaultName 
           }),
         });
+        
         const data = await res.json();
-        console.log("Welcome API result:", data);
+        console.log("Welcome API response:", data);
 
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (error: any) {
+      console.error("Authentication error caught:", error.message);
       alert(`Error: ${error.message.replace('Firebase: ', '')}`);
       setIsLoading(false);
     }
@@ -429,6 +434,7 @@ export default function AuthPage() {
       
       if (authMode === 'signup' && userCredential.user) {
         const defaultName = `Member_${phoneNumber.slice(-4)}`;
+        console.log("Phone signup verified. Calling /api/welcome...");
         await fetch('/api/welcome', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
