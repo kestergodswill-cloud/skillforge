@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User, deleteUser as deleteAuthUser } from 'firebase/auth';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, getDoc, setDoc, documentId } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { 
@@ -264,14 +264,26 @@ export default function AccountPage() {
     }
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    if (!auth.currentUser) return;
     setLoadingMessage('Deleting account...');
     setIsProcessing(true);
-    setTimeout(() => {
-      alert("Account deletion logic connecting to Firebase soon!");
-      setShowDeleteWarning(false);
+
+    try {
+      const userUid = auth.currentUser.uid;
+      await deleteDoc(doc(db, 'users', userUid));
+      await deleteAuthUser(auth.currentUser);
+      router.push('/auth');
+    } catch (error: any) {
+      console.error("Error deleting account:", error);
+      if (error.code === 'auth/requires-recent-login') {
+        alert("For security reasons, please log out and sign back in before deleting your account.");
+      } else {
+        alert(`Failed to delete account: ${error.message || "Please try again."}`);
+      }
       setIsProcessing(false);
-    }, 1500);
+      setShowDeleteWarning(false);
+    }
   };
 
   const handleCreateListingClick = () => {
@@ -676,42 +688,41 @@ export default function AccountPage() {
         )}
 
         {activeTab === 'settings' && !showGuestModal && (
-          <div className="px-5 sm:px-8 py-6 max-w-sm mx-auto space-y-4 animate-in fade-in duration-300">
+          <div className="px-5 sm:px-8 py-6 max-w-sm mx-auto space-y-3 animate-in fade-in duration-300">
             
-            <div className="space-y-2.5">
+            <div className="space-y-2">
                <button 
                  onClick={handleSignOut} 
-                 className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-[13px] font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors cursor-pointer shadow-sm text-left"
+                 className="w-full px-3.5 py-2 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-[13px] font-medium hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-left"
                >
                  Log out
                </button>
                
                <button 
                  onClick={() => setShowDeleteWarning(true)} 
-                 className="w-full px-4 py-2.5 rounded-lg border border-rose-200/60 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-900/10 text-rose-600 text-[13px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors cursor-pointer shadow-sm text-left"
+                 className="w-full px-3.5 py-2 rounded-md border border-rose-200/50 dark:border-rose-900/30 bg-rose-50/30 dark:bg-rose-900/10 text-rose-600 text-[13px] font-medium hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors cursor-pointer text-left"
                >
                  Delete account
                </button>
             </div>
 
             {showDeleteWarning && (
-              <div className="p-5 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-rose-100 dark:border-rose-900/30 animate-in fade-in zoom-in-95 duration-200 shadow-sm">
-                <h4 className="text-[14px] font-bold text-slate-900 dark:text-white mb-1.5">Leaving already?</h4>
-                <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-                  We'll be sad to see you go. Deleting your account will wipe out your hosted events, community connections, and profile data for good.
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 space-y-3">
+                <p className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Are you sure? This removes your events and profile completely.
                 </p>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={handleDeleteAccount} 
-                    className="flex-1 py-2 bg-rose-600 text-white text-[12px] font-semibold rounded-lg hover:bg-rose-500 transition-colors cursor-pointer shadow-sm text-center"
+                    className="px-3 py-1.5 bg-rose-600 text-white text-[12px] font-medium rounded-md hover:bg-rose-500 transition-colors cursor-pointer"
                   >
-                    Yes, delete account
+                    Yes, delete
                   </button>
                   <button 
                     onClick={() => setShowDeleteWarning(false)} 
-                    className="flex-1 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[12px] font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer text-center"
+                    className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[12px] font-medium rounded-md hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                   >
-                    Never mind
+                    Cancel
                   </button>
                 </div>
               </div>
