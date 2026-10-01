@@ -6,8 +6,8 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { 
   HiOutlineCalendar, 
   HiOutlineTrash, 
@@ -17,7 +17,9 @@ import {
   HiOutlineUser,
   HiOutlinePencil,
   HiOutlineXMark,
-  HiOutlineEllipsisHorizontal
+  HiOutlineEllipsisHorizontal,
+  HiOutlineClock,
+  HiOutlinePhoto
 } from 'react-icons/hi2';
 
 export default function HostDashboard() {
@@ -27,7 +29,7 @@ export default function HostDashboard() {
   const [myListings, setMyListings] = useState<any[]>([]);
   const [registrations, setRegistrations] = useState<{ [key: string]: any[] }>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [showPendingModal, setShowPendingModal] = useState(false);
   
   const [activeTabApplicants, setActiveTabApplicants] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -38,24 +40,44 @@ export default function HostDashboard() {
   const [editForm, setEditForm] = useState({
     title: '',
     schedule: '',
+    address: '',
+    state: '',
     city: '',
     country: '',
-    description: ''
+    description: '',
+    mediaUrl: ''
   });
+  const [selectedEditMedia, setSelectedEditMedia] = useState<File | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         router.push('/auth?next=/host');
-      } else if (currentUser.isAnonymous) {
-        setIsChecking(false);
-        setIsLoading(false);
-        setShowGuestModal(true);
-      } else {
-        setUser(currentUser);
-        setIsChecking(false);
+        return;
+      }
+      
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          
+          if (!userData.isVerified) {
+            if (userData.verificationStatus === 'pending') {
+              setIsChecking(false);
+              setIsLoading(false);
+              setShowPendingModal(true);
+              return;
+            } else {
+              router.push('/verify');
+              return;
+            }
+          }
+          
+          setUser(currentUser);
+          setIsChecking(false);
 
-        try {
           const programsRef = collection(db, 'programs');
           const q = query(programsRef, where("hostId", "==", currentUser.uid));
           const snapshot = await getDocs(q);
@@ -79,33 +101,28 @@ export default function HostDashboard() {
               const regsSnap = await getDocs(qRegs);
               regsSnap.docs.forEach(d => {
                 const data = d.data();
+                let normalizedStatus = (data.status || 'pending').toLowerCase().trim();
+                if (normalizedStatus === 'accepted') normalizedStatus = 'approved';
+                
                 const pId = data.programId;
                 if (!regsMap[pId]) regsMap[pId] = [];
-                regsMap[pId].push({ id: d.id, ...data });
+                regsMap[pId].push({ id: d.id, ...data, status: normalizedStatus });
               });
             }
             setRegistrations(regsMap);
           }
 
-        } catch (error) {
-          console.error("Error fetching user listings:", error);
-        } finally {
-          setIsLoading(false);
+        } else {
+          router.push('/verify');
         }
+      } catch (error) {
+        console.error("Auth/Fetch check failed:", error);
+      } finally {
+        setIsLoading(false);
       }
     });
     return () => unsubscribe();
   }, [router]);
-
-  const handleUpgradeAccount = async () => {
-    try {
-      await signOut(auth);
-      router.push('/auth?next=/host');
-    } catch (error) {
-      console.error('Error signing out guest:', error);
-      router.push('/auth?next=/host');
-    }
-  };
 
   const handleDeleteListing = async (id: string) => {
     if (!confirm("Are you sure you want to permanently delete this event?")) return;
@@ -120,7 +137,7 @@ export default function HostDashboard() {
     }
   };
 
-  const handleUpdateApplicantStatus = async (regId: string, programId: string, newStatus: 'accepted' | 'rejected') => {
+  const handleUpdateApplicantStatus = async (regId: string, programId: string, newStatus: 'approved' | 'rejected') => {
     try {
       await updateDoc(doc(db, 'registrations', regId), { status: newStatus });
       setRegistrations(prev => ({
@@ -145,12 +162,27 @@ export default function HostDashboard() {
     setEditForm({
       title: item.title || '',
       schedule: item.schedule || '',
+      address: item.address || item.location || '',
+      state: item.state || '',
       city: item.city || '',
       country: item.country || '',
-      description: item.description || ''
+      description: item.description || '',
+      mediaUrl: item.mediaUrl || ''
     });
+    setSelectedEditMedia(null);
     setEditingEvent(item);
     setOpenDropdownId(null);
+  };
+
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 50 * 1024 * 1024) {
+        alert("File is too large. Max 50MB.");
+        return;
+      }
+      setSelectedEditMedia(file);
+    }
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -159,10 +191,45 @@ export default function HostDashboard() {
     
     setIsProcessingEdit(true);
     try {
+      let updatedMediaUrl = editForm.mediaUrl;
+
+      if (selectedEditMedia) {
+        const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+        const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET;
+        
+        if (!cloudinaryCloudName || !uploadPreset) throw new Error("Cloudinary configuration missing.");
+
+        const uploadData = new FormData();
+        uploadData.append('file', selectedEditMedia);
+        uploadData.append('upload_preset', uploadPreset);
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`, {
+          method: 'POST',
+          body: uploadData,
+        });
+
+        if (!uploadRes.ok) throw new Error('Failed to upload media');
+        
+        const cloudinaryData = await uploadRes.json();
+        updatedMediaUrl = cloudinaryData.secure_url;
+      }
+
+      const payload = {
+        title: editForm.title,
+        schedule: editForm.schedule,
+        address: editForm.address,
+        location: editForm.address,
+        state: editForm.state,
+        city: editForm.city,
+        country: editForm.country,
+        description: editForm.description,
+        mediaUrl: updatedMediaUrl
+      };
+
       const docRef = doc(db, 'programs', editingEvent.id);
-      await updateDoc(docRef, editForm);
+      await updateDoc(docRef, payload);
       
-      setMyListings(prev => prev.map(item => item.id === editingEvent.id ? { ...item, ...editForm } : item));
+      setMyListings(prev => prev.map(item => item.id === editingEvent.id ? { ...item, ...payload } : item));
       setEditingEvent(null);
     } catch (error) {
       console.error("Failed to update event:", error);
@@ -183,7 +250,7 @@ export default function HostDashboard() {
     return true;
   });
 
-  if ((isChecking || isLoading) && !showGuestModal) {
+  if ((isChecking || isLoading) && !showPendingModal) {
     return (
       <main className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-between transition-colors duration-300">
         <Navbar />
@@ -198,27 +265,30 @@ export default function HostDashboard() {
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col justify-between font-sans transition-colors duration-300">
       
-      {showGuestModal && (
+      {showPendingModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-[380px] rounded-2xl shadow-xl p-8 animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-[380px] rounded-2xl shadow-xl p-8 animate-in zoom-in-95 duration-200 text-center border border-slate-100 dark:border-slate-800">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-500 mb-5">
+              <HiOutlineClock className="text-3xl" />
+            </div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-              Host an event
+              Verification Pending
             </h3>
             <p className="text-[14px] text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
-              Guest users cannot host events or manage applicants. Register for a free profile to unlock all community features.
+              Your identity documents are currently being reviewed. You will be able to host events and manage applicants once your profile is fully approved.
             </p>
-            <div className="flex flex-col sm:flex-row-reverse gap-3">
+            <div className="flex flex-col gap-3">
               <button 
-                onClick={handleUpgradeAccount} 
-                className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 text-white text-[14px] font-semibold rounded-lg hover:bg-emerald-500 transition-colors cursor-pointer"
+                onClick={() => router.push('/skills')} 
+                className="w-full px-6 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[14px] font-semibold rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors cursor-pointer"
               >
-                Create free profile
+                Explore skills meanwhile
               </button>
               <button 
-                onClick={() => router.back()} 
-                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[14px] font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                onClick={() => router.push('/account')} 
+                className="w-full px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[14px] font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               >
-                Cancel
+                Go to Account
               </button>
             </div>
           </div>
@@ -226,7 +296,7 @@ export default function HostDashboard() {
       )}
 
       <Navbar />
-      
+
       <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-6 sm:pt-8 px-5 sm:px-6">
         
         <div className="max-w-4xl mx-auto mb-6 lg:max-w-none">
@@ -411,11 +481,11 @@ export default function HostDashboard() {
                                   </div>
                                   
                                   <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                                    applicant.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : 
+                                    applicant.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 
                                     applicant.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
                                     'bg-amber-100 text-amber-700'
                                   }`}>
-                                    {applicant.status || 'Pending'}
+                                    {applicant.status === 'approved' ? 'Approved' : applicant.status || 'Pending'}
                                   </span>
                                 </div>
 
@@ -428,8 +498,8 @@ export default function HostDashboard() {
                                 <div className="flex items-center gap-1.5 pt-1 w-full">
                                   {(!applicant.status || applicant.status === 'pending') ? (
                                     <>
-                                      <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'accepted')} className="flex-1 px-2 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-500 transition-colors cursor-pointer">
-                                        Accept
+                                      <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'approved')} className="flex-1 px-2 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-500 transition-colors cursor-pointer">
+                                        Approve
                                       </button>
                                       <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'rejected')} className="flex-1 px-2 py-1.5 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[11px] font-bold hover:bg-rose-500 hover:text-white transition-colors cursor-pointer">
                                         Reject
@@ -437,7 +507,7 @@ export default function HostDashboard() {
                                     </>
                                   ) : (
                                     <div className="flex-1 text-center py-1 text-[11px] font-bold text-slate-400 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800">
-                                      Resolved
+                                      {applicant.status === 'approved' ? 'Approved' : 'Rejected'}
                                     </div>
                                   )}
                                 </div>
@@ -457,14 +527,19 @@ export default function HostDashboard() {
       </div>
 
       {editingEvent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 transition-opacity font-sans">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-[420px] rounded-2xl shadow-xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 transition-opacity font-sans">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-slate-100 dark:border-slate-800">
             
-            <div className="px-6 py-5 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Event</h3>
+            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-3 sm:hidden shrink-0" />
+            
+            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div>
+                <h3 className="text-[18px] font-extrabold text-slate-900 dark:text-white">Edit Event</h3>
+                <p className="text-[12px] font-medium text-slate-500 mt-0.5">Update title, location, schedule, and cover photo.</p>
+              </div>
               <button 
                 onClick={() => setEditingEvent(null)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-full transition-colors cursor-pointer"
               >
                 <HiOutlineXMark className="text-xl" />
               </button>
@@ -474,68 +549,101 @@ export default function HostDashboard() {
               <form id="editForm" onSubmit={handleEditSubmit} className="space-y-4">
                 
                 <div>
-                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Event Title</label>
+                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Event Title</label>
                   <input
                     type="text"
                     value={editForm.title}
                     onChange={(e) => setEditForm({...editForm, title: e.target.value})}
                     required
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Schedule / Time</label>
+                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Schedule / Time</label>
                   <input
                     type="text"
                     value={editForm.schedule}
                     onChange={(e) => setEditForm({...editForm, schedule: e.target.value})}
                     required
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Specific Address / Landmark</label>
+                  <input
+                    type="text"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm({...editForm, address: e.target.value})}
+                    required
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
                   />
                 </div>
 
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">City</label>
+                    <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">State / Region</label>
+                    <input
+                      type="text"
+                      value={editForm.state}
+                      onChange={(e) => setEditForm({...editForm, state: e.target.value})}
+                      required
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">City</label>
                     <input
                       type="text"
                       value={editForm.city}
                       onChange={(e) => setEditForm({...editForm, city: e.target.value})}
                       required
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Country</label>
-                    <input
-                      type="text"
-                      value={editForm.country}
-                      onChange={(e) => setEditForm({...editForm, country: e.target.value})}
-                      required
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
+                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Country</label>
+                  <input
+                    type="text"
+                    value={editForm.country}
+                    onChange={(e) => setEditForm({...editForm, country: e.target.value})}
+                    required
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Cover Image</label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex-1 flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent px-4 py-3 rounded-xl text-[13px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer transition-colors">
+                      <HiOutlinePhoto className="text-lg" />
+                      {selectedEditMedia ? selectedEditMedia.name : 'Change Cover Photo'}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleEditFileChange} />
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-800 dark:text-slate-200 mb-1.5">Description</label>
                   <textarea
                     value={editForm.description}
                     onChange={(e) => setEditForm({...editForm, description: e.target.value})}
                     required
                     rows={4}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none resize-none transition-all"
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent px-4 py-3 rounded-xl text-[14px] font-medium text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 outline-none resize-none transition-all"
                   />
                 </div>
 
               </form>
             </div>
 
-            <div className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
+            <div className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-end gap-3 rounded-b-3xl">
               <button 
                 onClick={() => setEditingEvent(null)}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-[14px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-[13px] font-bold text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -543,7 +651,7 @@ export default function HostDashboard() {
                 type="submit"
                 form="editForm"
                 disabled={isProcessingEdit}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-[14px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
               >
                 {isProcessingEdit ? 'Saving...' : 'Save Changes'}
               </button>

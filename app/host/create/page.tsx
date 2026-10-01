@@ -7,34 +7,42 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { 
   HiOutlinePhoto, 
   HiOutlineCheckBadge, 
   HiOutlineCheckCircle,
   HiOutlineArrowRight,
-  HiOutlineArrowLeft
+  HiOutlineArrowLeft,
+  HiOutlineClock
 } from 'react-icons/hi2';
 import { MdOutlineComputer, MdOutlineLocationOn } from 'react-icons/md';
+
+const categoryOptions = [
+  { id: 'Tech & Digital', label: 'Tech & Digital', desc: 'Coding, design, digital marketing' },
+  { id: 'Vocational Craft', label: 'Vocational Craft', desc: 'Fashion, baking, woodworking' },
+  { id: 'Technical Trades', label: 'Technical Trades', desc: 'Electrical, plumbing, repair' },
+  { id: 'Public Health', label: 'Public Health', desc: 'First-aid, sanitation, health drives' },
+  { id: 'Wellness', label: 'Wellness', desc: 'Fitness, mental health, yoga' },
+  { id: 'Arts & Culture', label: 'Arts & Culture', desc: 'Painting, music, languages' }
+];
 
 export default function HostCreatePage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isChecking, setIsChecking] = useState(true);
+  const [showPendingModal, setShowPendingModal] = useState(false);
   
   const [step, setStep] = useState(1);
 
   const [formData, setFormData] = useState({
-    listingType: 'workshop',
+    category: 'Tech & Digital',
     workshopMode: 'physical',
     title: '',
     difficulty: 'beginner',
-    workoutFocus: '',
+    focusArea: '', 
     equipmentNeeded: '',
-    healthTopic: '',
     ageRequired: '',
-    cleanupFocus: '',
-    trashTarget: '',
     whoCanJoin: '',
     country: '',
     state: '',
@@ -54,22 +62,53 @@ export default function HostCreatePage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         router.push('/auth?next=/host/create');
-      } else if (currentUser.isAnonymous) {
+        return;
+      }
+      
+      if (currentUser.isAnonymous) {
         alert("You need to create a free account to use this feature!");
         router.push('/auth?next=/host/create');
-      } else {
-        setUser(currentUser);
-        setFormData(prev => ({
-          ...prev,
-          organizer: currentUser.displayName || '',
-          contactEmail: currentUser.email || ''
-        }));
+        return;
+      } 
+      
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          
+          setUser(currentUser);
+          setFormData(prev => ({
+            ...prev,
+            organizer: currentUser.displayName || '',
+            contactEmail: currentUser.email || ''
+          }));
+
+          if (!userData.isVerified) {
+            if (userData.verificationStatus === 'pending') {
+              setIsChecking(false);
+              setShowPendingModal(true);
+              return;
+            } else {
+              router.push('/verify');
+              return;
+            }
+          }
+          
+          setIsChecking(false);
+        } else {
+          router.push('/verify');
+        }
+      } catch (error) {
+        console.error("Auth/Fetch check failed:", error);
         setIsChecking(false);
       }
     });
+
     return () => unsubscribe();
   }, [router]);
 
@@ -93,6 +132,8 @@ export default function HostCreatePage() {
     }
   };
 
+  const isSkillCategory = ['Tech & Digital', 'Vocational Craft', 'Technical Trades', 'Arts & Culture'].includes(formData.category);
+
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { [key: string]: string } = {};
@@ -100,16 +141,20 @@ export default function HostCreatePage() {
     if (step === 2) {
       if (!formData.title.trim()) newErrors.title = "This field can't be empty";
       
-      if (formData.listingType === 'workshop' && !formData.whoCanJoin.trim()) newErrors.whoCanJoin = "This field can't be empty";
-      if (formData.listingType === 'workout' && !formData.workoutFocus.trim()) newErrors.workoutFocus = "This field can't be empty";
-      if (formData.listingType === 'workout' && !formData.equipmentNeeded.trim()) newErrors.equipmentNeeded = "This field can't be empty";
-      if (formData.listingType === 'health' && !formData.healthTopic.trim()) newErrors.healthTopic = "This field can't be empty";
-      if (formData.listingType === 'health' && !formData.ageRequired.trim()) newErrors.ageRequired = "This field can't be empty";
-      if (formData.listingType === 'cleanup' && !formData.cleanupFocus.trim()) newErrors.cleanupFocus = "This field can't be empty";
-      if (formData.listingType === 'cleanup' && !formData.trashTarget.trim()) newErrors.trashTarget = "This field can't be empty";
+      if (isSkillCategory && !formData.whoCanJoin.trim()) newErrors.whoCanJoin = "This field can't be empty";
+      
+      if (formData.category === 'Wellness') {
+        if (!formData.focusArea.trim()) newErrors.focusArea = "This field can't be empty";
+        if (!formData.equipmentNeeded.trim()) newErrors.equipmentNeeded = "This field can't be empty";
+      }
+      
+      if (formData.category === 'Public Health') {
+        if (!formData.focusArea.trim()) newErrors.focusArea = "This field can't be empty";
+        if (!formData.ageRequired.trim()) newErrors.ageRequired = "This field can't be empty";
+      }
 
     } else if (step === 3) {
-      if (formData.workshopMode === 'physical' || formData.listingType !== 'workshop') {
+      if (formData.workshopMode === 'physical') {
         if (!formData.country.trim()) newErrors.country = "This field can't be empty";
         if (!formData.state.trim()) newErrors.state = "This field can't be empty";
         if (!formData.city.trim()) newErrors.city = "This field can't be empty";
@@ -149,12 +194,9 @@ export default function HostCreatePage() {
     setIsSubmitting(true);
 
     try {
-      let dbType = formData.listingType;
-      if (formData.listingType === 'workshop') dbType = 'skill';
-
       let mediaUrl = null;
 
-      if (selectedMedia && (formData.listingType === 'workshop' || formData.listingType === 'cleanup')) {
+      if (selectedMedia) {
         setUploadStatus('uploading');
         const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
         const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET;
@@ -181,22 +223,21 @@ export default function HostCreatePage() {
       }
 
       const newProgramData = {
-        type: dbType,
-        workshopMode: formData.listingType === 'workshop' ? formData.workshopMode : null,
+        type: 'event',
+        category: formData.category, 
+        workshopMode: formData.workshopMode,
         title: formData.title,
-        difficulty: formData.listingType === 'workshop' ? formData.difficulty : null,
-        audience: formData.listingType === 'workshop' ? formData.whoCanJoin : null,
-        workoutFocus: formData.listingType === 'workout' ? formData.workoutFocus : null,
-        equipmentNeeded: formData.listingType === 'workout' ? formData.equipmentNeeded : null,
-        healthTopic: formData.listingType === 'health' ? formData.healthTopic : null,
-        ageRequired: formData.listingType === 'health' ? formData.ageRequired : null,
-        cleanupFocus: formData.listingType === 'cleanup' ? formData.cleanupFocus : null,
-        trashTarget: formData.listingType === 'cleanup' ? formData.trashTarget : null,
         
-        country: formData.workshopMode === 'digital' && formData.listingType === 'workshop' ? 'Online' : formData.country,
-        state: formData.workshopMode === 'digital' && formData.listingType === 'workshop' ? 'Remote' : formData.state,
-        city: formData.workshopMode === 'digital' && formData.listingType === 'workshop' ? 'Global / Virtual' : formData.city,
-        location: formData.workshopMode === 'digital' && formData.listingType === 'workshop' ? 'Zoom / Online Stream' : formData.location,
+        difficulty: isSkillCategory ? formData.difficulty : null,
+        audience: isSkillCategory ? formData.whoCanJoin : null,
+        focusArea: ['Wellness', 'Public Health'].includes(formData.category) ? formData.focusArea : null,
+        equipmentNeeded: formData.category === 'Wellness' ? formData.equipmentNeeded : null,
+        ageRequired: formData.category === 'Public Health' ? formData.ageRequired : null,
+        
+        country: formData.workshopMode === 'digital' ? 'Online' : formData.country,
+        state: formData.workshopMode === 'digital' ? 'Remote' : formData.state,
+        city: formData.workshopMode === 'digital' ? 'Global / Virtual' : formData.city,
+        location: formData.workshopMode === 'digital' ? 'Zoom / Online Stream' : formData.location,
         
         schedule: formData.schedule,
         description: formData.description,
@@ -224,7 +265,7 @@ export default function HostCreatePage() {
         message: `Your event "${formData.title}" has been received and is currently under review by our moderation team.`,
         isRead: false,
         createdAt: serverTimestamp(),
-        link: '/dashboard'
+        link: '/host'
       });
 
       setShowSuccessModal(true);
@@ -238,7 +279,7 @@ export default function HostCreatePage() {
     }
   };
 
-  if (isChecking || !user) {
+  if (isChecking || (!user && !showPendingModal)) {
     return (
       <main className="min-h-screen bg-white dark:bg-slate-950 flex flex-col justify-between transition-colors duration-300">
         <Navbar />
@@ -257,6 +298,36 @@ export default function HostCreatePage() {
     <main className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col transition-colors duration-300 relative">
       <Navbar />
       
+      {showPendingModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-[380px] rounded-2xl shadow-xl p-8 animate-in zoom-in-95 duration-200 text-center border border-slate-100 dark:border-slate-800">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-500 mb-5">
+              <HiOutlineClock className="text-3xl" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              Verification Pending
+            </h3>
+            <p className="text-[14px] text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+              Your identity documents are currently being reviewed. You will be able to publish events once your profile is fully approved.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => router.push('/skills')} 
+                className="w-full px-6 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[14px] font-semibold rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Explore skills meanwhile
+              </button>
+              <button 
+                onClick={() => router.push('/account')} 
+                className="w-full px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[14px] font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Go to Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md p-6 sm:p-8 space-y-4 shadow-2xl text-center border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
@@ -270,10 +341,10 @@ export default function HostCreatePage() {
               <p>You will receive an email and in-app notification once your event goes live or if we need more information.</p>
             </div>
             <div className="pt-4 flex flex-col gap-3">
-              <Link href="/" className="w-full rounded-2xl bg-emerald-600 py-4 text-sm font-bold text-white hover:bg-emerald-500 transition-colors shadow-sm">
+              <Link href="/host" className="w-full rounded-2xl bg-emerald-600 py-4 text-sm font-bold text-white hover:bg-emerald-500 transition-colors shadow-sm">
                 Done
               </Link>
-              <button onClick={() => { setShowSuccessModal(false); setStep(1); }} className="w-full rounded-2xl bg-slate-100 dark:bg-slate-800 py-4 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+              <button onClick={() => { setShowSuccessModal(false); setStep(1); setFormData({...formData, title: '', description: ''}); setSelectedMedia(null); }} className="w-full rounded-2xl bg-slate-100 dark:bg-slate-800 py-4 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">
                 Host Another Event
               </button>
             </div>
@@ -305,56 +376,49 @@ export default function HostCreatePage() {
           
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="space-y-3">
-                {[
-                  { id: 'workshop', label: 'Technical Workshop', desc: 'Teach a skill, craft, or tech class' },
-                  { id: 'cleanup', label: 'Eco / Cleanup Drive', desc: 'Organize a community cleanup' },
-                  { id: 'health', label: 'Health-Safety Class', desc: 'Host a first-aid or health seminar' },
-                  { id: 'workout', label: 'Group Workout', desc: 'Lead a fitness or workout session' }
-                ].map((item) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {categoryOptions.map((item) => (
                   <label key={item.id} className="block cursor-pointer relative">
                     <input 
                       type="radio" 
-                      name="listingType" 
+                      name="category" 
                       value={item.id} 
-                      checked={formData.listingType === item.id} 
+                      checked={formData.category === item.id} 
                       onChange={handleChange} 
                       className="peer sr-only" 
                     />
-                    <div className="p-4 rounded-2xl border-2 transition-all bg-white dark:bg-slate-900 peer-checked:bg-emerald-50/50 dark:peer-checked:bg-emerald-900/10 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 peer-checked:border-emerald-500 flex items-center justify-between">
-                      <div>
-                        <p className={`font-bold text-base transition-colors ${formData.listingType === item.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
+                    <div className="p-4 rounded-2xl border-2 transition-all bg-white dark:bg-slate-900 peer-checked:bg-emerald-50/50 dark:peer-checked:bg-emerald-900/10 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 peer-checked:border-emerald-500 h-full flex flex-col justify-center">
+                      <div className="flex items-start justify-between mb-1">
+                        <p className={`font-bold text-[15px] leading-tight transition-colors ${formData.category === item.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
                           {item.label}
                         </p>
-                        <p className="text-sm text-slate-500 mt-0.5">{item.desc}</p>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${formData.category === item.id ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'}`}>
+                          {formData.category === item.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                        </div>
                       </div>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${formData.listingType === item.id ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600'}`}>
-                        {formData.listingType === item.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
-                      </div>
+                      <p className="text-[13px] text-slate-500 mt-1 leading-snug pr-4">{item.desc}</p>
                     </div>
                   </label>
                 ))}
               </div>
 
-              {formData.listingType === 'workshop' && (
-                <div className="pt-2 animate-in fade-in">
-                  <label className={labelBaseClasses}>How are you hosting this?</label>
-                  <div className="flex p-1 bg-slate-100 dark:bg-slate-800/50 rounded-2xl">
-                    <label className="flex-1 cursor-pointer">
-                      <input type="radio" name="workshopMode" value="physical" checked={formData.workshopMode === 'physical'} onChange={handleChange} className="peer sr-only" />
-                      <div className="py-3 flex items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-slate-900 dark:peer-checked:text-white peer-checked:shadow-sm text-slate-500">
-                        <MdOutlineLocationOn className="text-lg" /> Physical
-                      </div>
-                    </label>
-                    <label className="flex-1 cursor-pointer">
-                      <input type="radio" name="workshopMode" value="digital" checked={formData.workshopMode === 'digital'} onChange={handleChange} className="peer sr-only" />
-                      <div className="py-3 flex items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-slate-900 dark:peer-checked:text-white peer-checked:shadow-sm text-slate-500">
-                        <MdOutlineComputer className="text-lg" /> Digital
-                      </div>
-                    </label>
-                  </div>
+              <div className="pt-4 animate-in fade-in">
+                <label className={labelBaseClasses}>How are you hosting this event?</label>
+                <div className="flex p-1 bg-slate-100 dark:bg-slate-800/50 rounded-2xl">
+                  <label className="flex-1 cursor-pointer">
+                    <input type="radio" name="workshopMode" value="physical" checked={formData.workshopMode === 'physical'} onChange={handleChange} className="peer sr-only" />
+                    <div className="py-3 flex items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-slate-900 dark:peer-checked:text-white peer-checked:shadow-sm text-slate-500">
+                      <MdOutlineLocationOn className="text-lg" /> Physical
+                    </div>
+                  </label>
+                  <label className="flex-1 cursor-pointer">
+                    <input type="radio" name="workshopMode" value="digital" checked={formData.workshopMode === 'digital'} onChange={handleChange} className="peer sr-only" />
+                    <div className="py-3 flex items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-slate-900 dark:peer-checked:text-white peer-checked:shadow-sm text-slate-500">
+                      <MdOutlineComputer className="text-lg" /> Digital
+                    </div>
+                  </label>
                 </div>
-              )}
+              </div>
 
               <div className="pt-6 flex justify-end border-t border-slate-100 dark:border-slate-800/60 mt-8">
                 <button 
@@ -383,7 +447,7 @@ export default function HostCreatePage() {
                 {errors.title && <p className="text-xs text-rose-500 font-bold mt-2">{errors.title}</p>}
               </div>
 
-              {formData.listingType === 'workshop' && (
+              {isSkillCategory && (
                 <>
                   <div>
                     <label className={labelBaseClasses}>Difficulty Level</label>
@@ -407,12 +471,12 @@ export default function HostCreatePage() {
                 </>
               )}
 
-              {formData.listingType === 'workout' && (
+              {formData.category === 'Wellness' && (
                 <>
                   <div>
-                    <label className={labelBaseClasses}>Workout Focus / Style</label>
-                    <input type="text" name="workoutFocus" value={formData.workoutFocus} onChange={handleChange} placeholder="e.g., HIIT, Cardio, Strength" className={inputBaseClasses} />
-                    {errors.workoutFocus && <p className="text-xs text-rose-500 font-bold mt-2">{errors.workoutFocus}</p>}
+                    <label className={labelBaseClasses}>Wellness Focus / Style</label>
+                    <input type="text" name="focusArea" value={formData.focusArea} onChange={handleChange} placeholder="e.g., HIIT, Meditation, Yoga" className={inputBaseClasses} />
+                    {errors.focusArea && <p className="text-xs text-rose-500 font-bold mt-2">{errors.focusArea}</p>}
                   </div>
                   <div>
                     <label className={labelBaseClasses}>Equipment Needed</label>
@@ -422,32 +486,17 @@ export default function HostCreatePage() {
                 </>
               )}
 
-              {formData.listingType === 'health' && (
+              {formData.category === 'Public Health' && (
                 <>
                   <div>
-                    <label className={labelBaseClasses}>Specific Health Teaching</label>
-                    <input type="text" name="healthTopic" value={formData.healthTopic} onChange={handleChange} placeholder="e.g., CPR & First Aid Basics" className={inputBaseClasses} />
-                    {errors.healthTopic && <p className="text-xs text-rose-500 font-bold mt-2">{errors.healthTopic}</p>}
+                    <label className={labelBaseClasses}>Specific Topic / Activity</label>
+                    <input type="text" name="focusArea" value={formData.focusArea} onChange={handleChange} placeholder="e.g., CPR Basics, Community Cleanup" className={inputBaseClasses} />
+                    {errors.focusArea && <p className="text-xs text-rose-500 font-bold mt-2">{errors.focusArea}</p>}
                   </div>
                   <div>
                     <label className={labelBaseClasses}>Age Required</label>
                     <input type="text" name="ageRequired" value={formData.ageRequired} onChange={handleChange} placeholder="e.g., Adults 18+ or All Ages" className={inputBaseClasses} />
                     {errors.ageRequired && <p className="text-xs text-rose-500 font-bold mt-2">{errors.ageRequired}</p>}
-                  </div>
-                </>
-              )}
-
-              {formData.listingType === 'cleanup' && (
-                <>
-                  <div>
-                    <label className={labelBaseClasses}>Cleanup Focus</label>
-                    <input type="text" name="cleanupFocus" value={formData.cleanupFocus} onChange={handleChange} placeholder="e.g., Plastic Recovery" className={inputBaseClasses} />
-                    {errors.cleanupFocus && <p className="text-xs text-rose-500 font-bold mt-2">{errors.cleanupFocus}</p>}
-                  </div>
-                  <div>
-                    <label className={labelBaseClasses}>Target Area</label>
-                    <input type="text" name="trashTarget" value={formData.trashTarget} onChange={handleChange} placeholder="e.g., Neighborhood Market" className={inputBaseClasses} />
-                    {errors.trashTarget && <p className="text-xs text-rose-500 font-bold mt-2">{errors.trashTarget}</p>}
                   </div>
                 </>
               )}
@@ -465,9 +514,9 @@ export default function HostCreatePage() {
 
           {step === 3 && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              {formData.listingType === 'workshop' && formData.workshopMode === 'digital' ? (
+              {formData.workshopMode === 'digital' ? (
                 <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300">
-                  <p className="font-bold mb-1 flex items-center gap-2"><MdOutlineComputer className="text-xl"/> Digital Workshop</p>
+                  <p className="font-bold mb-1 flex items-center gap-2"><MdOutlineComputer className="text-xl"/> Digital Event</p>
                   <p className="text-sm">Physical location is bypassed. Just provide your schedule and meeting time below.</p>
                 </div>
               ) : (
@@ -524,28 +573,26 @@ export default function HostCreatePage() {
                 {errors.description && <p className="text-xs text-rose-500 font-bold mt-2">{errors.description}</p>}
               </div>
 
-              {(formData.listingType === 'workshop' || formData.listingType === 'cleanup') && (
-                <div>
-                  <label className={labelBaseClasses}>Event Cover (Optional)</label>
-                  <div className="mt-2 flex justify-center rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 px-6 py-12 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors relative cursor-pointer" onClick={() => !selectedMedia && document.getElementById('file-upload')?.click()}>
-                    <div className="text-center">
-                      {selectedMedia ? (
-                        <div className="flex flex-col items-center gap-3">
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedMedia.name}</p>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedMedia(null); }} className="text-xs text-rose-500 font-bold bg-rose-50 dark:bg-rose-900/30 px-4 py-2 rounded-full cursor-pointer">Remove File</button>
-                        </div>
-                      ) : (
-                        <>
-                          <HiOutlinePhoto className="mx-auto h-12 w-12 text-slate-400 mb-3" />
-                          <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Click to upload image</p>
-                          <p className="text-xs text-slate-500 mt-1.5">PNG, JPG, WEBP up to 50MB</p>
-                          <input id="file-upload" type="file" className="sr-only" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleFileChange} />
-                        </>
-                      )}
-                    </div>
+              <div>
+                <label className={labelBaseClasses}>Event Cover (Optional)</label>
+                <div className="mt-2 flex justify-center rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 px-6 py-12 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors relative cursor-pointer" onClick={() => !selectedMedia && document.getElementById('file-upload')?.click()}>
+                  <div className="text-center">
+                    {selectedMedia ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedMedia.name}</p>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedMedia(null); }} className="text-xs text-rose-500 font-bold bg-rose-50 dark:bg-rose-900/30 px-4 py-2 rounded-full cursor-pointer">Remove File</button>
+                      </div>
+                    ) : (
+                      <>
+                        <HiOutlinePhoto className="mx-auto h-12 w-12 text-slate-400 mb-3" />
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Click to upload image</p>
+                        <p className="text-xs text-slate-500 mt-1.5">PNG, JPG, WEBP up to 50MB</p>
+                        <input id="file-upload" type="file" className="sr-only" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleFileChange} />
+                      </>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               <div className="pt-6 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800/60 mt-8">
                 <button type="button" onClick={handlePrevStep} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 px-8 py-4 text-sm font-bold text-slate-700 dark:text-slate-300 transition-all cursor-pointer">

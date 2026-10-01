@@ -522,7 +522,7 @@ export default function UserProfilePage() {
                   ) : (
                     <div className="grid grid-cols-3 gap-1 sm:gap-4">
                       {pastWorkshops.map((workshop) => (
-                        <Link href="/skills" key={workshop.id} className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer group rounded-sm sm:rounded-xl">
+                        <Link href={`/skills/${workshop.id}`} key={workshop.id} className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer group rounded-sm sm:rounded-xl">
                           <img 
                             src={workshop.mediaUrl || "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"} 
                             alt={workshop.title} 
@@ -544,7 +544,7 @@ export default function UserProfilePage() {
                   ) : (
                     <div className="grid grid-cols-3 gap-1 sm:gap-4">
                       {joinedWorkshops.map((workshop) => (
-                        <Link href="/skills" key={workshop.id} className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer group rounded-sm sm:rounded-xl">
+                        <Link href={`/skills/${workshop.id}`} key={workshop.id} className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer group rounded-sm sm:rounded-xl">
                           <img 
                             src={workshop.mediaUrl || "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"} 
                             alt={workshop.title} 

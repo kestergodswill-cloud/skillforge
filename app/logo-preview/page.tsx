@@ -72,7 +72,6 @@ function Logo({ size = 44, className = "", theme = "auto" }: LogoProps) {
 export default function LogoPreviewPage() {
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-white">
-      {/* The scale-[3] class triples the size of your logo so it is crystal clear for the screenshot */}
       <div className="scale-[3] p-10">
         <Logo theme="light" />
       </div>

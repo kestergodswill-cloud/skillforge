@@ -1,8 +1,6 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -10,7 +8,16 @@ import RegistrationModal from '@/components/RegistrationModal';
 import { auth, db } from '@/lib/firebase';
 import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { HiOutlineMagnifyingGlass, HiOutlineMapPin, HiOutlineHeart, HiHeart, HiChevronDown } from 'react-icons/hi2';
+import { 
+  HiOutlineMagnifyingGlass, 
+  HiOutlineMapPin, 
+  HiOutlineHeart, 
+  HiHeart, 
+  HiChevronDown,
+  HiOutlineClock,
+  HiOutlinePhone,
+  HiOutlineEnvelope
+} from 'react-icons/hi2';
 
 const africanLocations = [
   {
@@ -141,7 +148,7 @@ export default function SkillsPage() {
   const router = useRouter();
   
   const [user, setUser] = useState<User | null>(null);
-  const [appliedPrograms, setAppliedPrograms] = useState<string[]>([]);
+  const [applicationStatuses, setApplicationStatuses] = useState<{ [key: string]: string }>({});
   const [savedPrograms, setSavedPrograms] = useState<string[]>([]);
   
   const [liveSkills, setLiveSkills] = useState<any[]>([]);
@@ -157,6 +164,8 @@ export default function SkillsPage() {
   const [selectedSkill, setSelectedSkill] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  
+  const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -166,9 +175,21 @@ export default function SkillsPage() {
           const regsRef = collection(db, 'registrations');
           const qRegs = query(regsRef, where("userId", "==", currentUser.uid));
           const regsSnap = await getDocs(qRegs);
-          setAppliedPrograms(regsSnap.docs.map(d => d.data().programId));
+          
+          const statusMap: { [key: string]: string } = {};
+          regsSnap.docs.forEach(d => {
+            const data = d.data();
+            let normalizedStatus = (data.status || 'pending').toLowerCase().trim();
+            
+            if (normalizedStatus === 'accepted') {
+              normalizedStatus = 'approved';
+            }
+            
+            statusMap[data.programId] = normalizedStatus;
+          });
+          setApplicationStatuses(statusMap);
         } catch (error) {
-          console.error("Failed to fetch user registrations:", error);
+          console.error(error);
         }
       }
     });
@@ -187,7 +208,7 @@ export default function SkillsPage() {
         
         setLiveSkills(data);
       } catch (error) {
-        console.error("Error fetching events:", error);
+        console.error(error);
       } finally {
         setIsLoading(false);
       }
@@ -203,13 +224,32 @@ export default function SkillsPage() {
 
   const filteredSkills = useMemo(() => {
     return liveSkills.filter(skill => {
-      const matchCountry = selectedCountry === 'All' || skill.country === selectedCountry;
-      const matchState = selectedState === 'All' || skill.state === selectedState;
-      const matchCity = !citySearch || (skill.city?.toLowerCase().includes(citySearch.toLowerCase()));
-      const matchCategory = selectedCategory === 'All' || skill.category === selectedCategory;
+      const matchCountry = selectedCountry === 'All' || (skill.country || '').toLowerCase() === selectedCountry.toLowerCase();
+      
+      const matchState = selectedState === 'All' || (() => {
+        const s = selectedState.toLowerCase().replace(/ state| province| region/g, '').trim();
+        const kSt = (skill.state || '').toLowerCase();
+        const kCi = (skill.city || '').toLowerCase();
+        const kLoc = (skill.address || skill.location || skill.venue || '').toLowerCase();
+        
+        if (kSt && (kSt.includes(s) || s.includes(kSt))) return true;
+        if (kCi && (kCi.includes(s) || s.includes(kCi))) return true;
+        if (kLoc && kLoc.includes(s)) return true;
+        return false;
+      })();
+      
+      const matchCity = !citySearch || (() => {
+        const cSearch = citySearch.toLowerCase().trim();
+        return (skill.city || '').toLowerCase().includes(cSearch) ||
+               (skill.state || '').toLowerCase().includes(cSearch) ||
+               (skill.address || skill.location || skill.venue || '').toLowerCase().includes(cSearch);
+      })();
+
+      const matchCategory = selectedCategory === 'All' || (skill.category || '').toLowerCase() === selectedCategory.toLowerCase();
+      
       const matchSearch = !searchQuery || 
-        skill.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        skill.description?.toLowerCase().includes(searchQuery.toLowerCase());
+        (skill.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (skill.description || '').toLowerCase().includes(searchQuery.toLowerCase());
       
       return matchCountry && matchState && matchCity && matchCategory && matchSearch;
     });
@@ -236,6 +276,10 @@ export default function SkillsPage() {
     setIsSuccess(false);
     setIsModalOpen(true);
   };
+  
+  const toggleDetails = (skillId: string) => {
+    setExpandedSkillId(prev => prev === skillId ? null : skillId);
+  };
 
   const handleFormSubmit = async (details: { fullName: string; phone: string; note: string }) => {
     if (!user || !selectedSkill) return;
@@ -253,7 +297,7 @@ export default function SkillsPage() {
         appliedAt: serverTimestamp()
       });
       
-      setAppliedPrograms(prev => [...prev, selectedSkill.id]);
+      setApplicationStatuses(prev => ({ ...prev, [selectedSkill.id]: 'pending' }));
       setIsSuccess(true);
     } catch (error) {
       console.error(error);
@@ -384,9 +428,11 @@ export default function SkillsPage() {
         ) : filteredSkills.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
             {filteredSkills.map((skill) => {
-              const hasApplied = appliedPrograms.includes(skill.id);
+              const regStatus = applicationStatuses[skill.id];
               const isHost = user?.uid === skill.hostId;
               const isSaved = savedPrograms.includes(skill.id);
+              const isExpanded = expandedSkillId === skill.id;
+              const canViewDetails = regStatus === 'approved' || isHost;
               
               return (
                 <div key={skill.id} className="group flex flex-col">
@@ -422,7 +468,11 @@ export default function SkillsPage() {
                         {skill.city || 'TBA'}, {skill.country || 'TBA'}
                       </h3>
                       <span className="text-[14px] font-semibold text-slate-900 dark:text-white shrink-0">
-                        {hasApplied ? <span className="text-emerald-600">Reserved</span> : isHost ? 'Yours' : 'Free'}
+                        {regStatus === 'approved' ? (
+                          <span className="text-emerald-600">Approved</span>
+                        ) : regStatus === 'pending' ? (
+                          <span className="text-amber-600">Pending</span>
+                        ) : isHost ? 'Yours' : 'Free'}
                       </span>
                     </div>
 
@@ -430,31 +480,80 @@ export default function SkillsPage() {
                     <p className="text-[14px] text-slate-500 dark:text-slate-400 truncate">{skill.schedule || 'Flexible dates'}</p>
                     
                     <div className="mt-1">
-                      <Link 
-                        href={`/host/${skill.hostId}`} 
+                      <button 
+                        onClick={() => router.push(`/host/${skill.hostId}`)}
                         className="text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900
-                        dark:hover:text-white transition-colors cursor-pointer"
+                        dark:hover:text-white transition-colors cursor-pointer text-left"
                       >
                         Hosted by <span className="font-semibold">{skill.organizer || 'Community Member'}</span>
-                      </Link>
+                      </button>
                     </div>
                     
-                    <div className="mt-4">
+                    <div className={`mt-4 ${canViewDetails ? 'grid grid-cols-2 gap-2' : ''}`}>
+                      {canViewDetails && (
+                        <button 
+                          onClick={() => toggleDetails(skill.id)}
+                          className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 py-2.5 text-[14px] font-bold text-slate-900 dark:text-white transition-all hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95"
+                        >
+                          Details
+                          <HiChevronDown className={`text-slate-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => handleReserveClick(skill, e)}
-                        disabled={hasApplied || isHost}
+                        disabled={!!regStatus || isHost}
                         className={`w-full rounded-lg py-2.5 text-[14px] font-bold transition-all cursor-pointer ${
-                          hasApplied 
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                          regStatus === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                            : regStatus === 'pending'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-default'
                             : isHost
                             ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                             : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 active:scale-95'
                         }`}
                       >
-                        {hasApplied ? 'Request Sent' : isHost ? 'Your Event' : 'Reserve Slot'}
+                        {regStatus === 'approved' ? 'Confirmed' : regStatus === 'pending' ? 'Requested' : isHost ? 'Yours' : 'Reserve'}
                       </button>
                     </div>
+                    
+                    {isExpanded && canViewDetails && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 text-[13px] text-slate-600 dark:text-slate-400 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <p className="leading-relaxed font-medium text-slate-800 dark:text-slate-200">
+                          {skill.description || 'Join this workshop to learn practical skills directly from an experienced community professional.'}
+                        </p>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2.5">
+                            <HiOutlineMapPin className="text-lg text-slate-400 shrink-0 mt-0.5" />
+                            <span>{skill.address || skill.location || skill.meetingLink || skill.venue || 'Virtual / Address not provided by host'}</span>
+                          </div>
+                          
+                          <div className="flex items-start gap-2.5">
+                            <HiOutlineClock className="text-lg text-slate-400 shrink-0 mt-0.5" />
+                            <span>{skill.time || skill.schedule || 'Schedule TBA'}</span>
+                          </div>
+
+                          {(skill.contactEmail || skill.contactPhone) && (
+                            <>
+                              <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/50"></div>
+                              {skill.contactEmail && (
+                                <div className="flex items-center gap-2.5">
+                                  <HiOutlineEnvelope className="text-lg text-slate-400 shrink-0" />
+                                  <a href={`mailto:${skill.contactEmail}`} className="hover:text-emerald-600 transition-colors">{skill.contactEmail}</a>
+                                </div>
+                              )}
+                              {skill.contactPhone && (
+                                <div className="flex items-center gap-2.5 mt-1.5">
+                                  <HiOutlinePhone className="text-lg text-slate-400 shrink-0" />
+                                  <a href={`tel:${skill.contactPhone}`} className="hover:text-emerald-600 transition-colors">{skill.contactPhone}</a>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                   </div>
                 </div>

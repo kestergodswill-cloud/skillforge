@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -333,7 +332,7 @@ export default function AdminDashboardPage() {
                                 </div>
                               )}
                               <div>
-                                <Link href={`/profile/${userItem.id}`} className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2 hover:text-emerald-600 transition-colors">
+                                <Link href={`/host/${userItem.id}`} className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2 hover:text-emerald-600 transition-colors">
                                   {userItem.name || 'Unnamed Member'}
                                   {userItem.isAdmin && <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-widest">Admin</span>}
                                 </Link>
@@ -398,7 +397,7 @@ export default function AdminDashboardPage() {
                           )}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <Link href={`/profile/${userItem.id}`} className="text-sm font-bold text-slate-900 dark:text-white truncate hover:text-emerald-600 transition-colors">
+                              <Link href={`/host/${userItem.id}`} className="text-sm font-bold text-slate-900 dark:text-white truncate hover:text-emerald-600 transition-colors">
                                 {userItem.name || 'Unnamed Member'}
                               </Link>
                               {userItem.isAdmin && (
@@ -661,7 +660,7 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
                   <div>
-                    <Link href={`/profile/${selectedUserToView.id}`} className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors">
+                    <Link href={`/host/${selectedUserToView.id}`} className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors">
                       {selectedUserToView.name || 'Unnamed Member'}
                     </Link>
                     <p className="text-sm text-slate-500 dark:text-slate-400">{selectedUserToView.email}</p>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -41,12 +40,12 @@ export default function Home() {
       <Navbar />
 
       <section 
-        className="relative flex flex-col items-center justify-center pt-32 pb-28 sm:pt-40 sm:pb-36 lg:pt-48 lg:pb-40 w-full bg-slate-950 bg-cover bg-center bg-no-repeat"
+        className="relative flex flex-col items-center justify-center min-h-[85vh] sm:min-h-screen w-full bg-slate-950 bg-cover bg-center bg-no-repeat px-5 sm:px-6 py-20"
         style={{ backgroundImage: "url('/image/hero-bg.jpeg')" }}
       >
         <div className="absolute inset-0 bg-slate-950/75 z-0" />
 
-        <div className="relative z-10 mx-auto max-w-4xl px-5 sm:px-6 text-center space-y-6 sm:space-y-8">
+        <div className="relative z-10 mx-auto max-w-4xl text-center space-y-6 sm:space-y-8">
 
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
             Practical skills for work. <br />

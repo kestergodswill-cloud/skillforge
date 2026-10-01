@@ -283,13 +283,8 @@ export default function AuthPage() {
             const defaultName = result.user.displayName || result.user.email.split('@')[0];
             await fetch('/api/welcome', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                email: result.user.email,
-                name: defaultName
-              }),
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: result.user.email, name: defaultName }),
             });
           }
         }
@@ -358,9 +353,7 @@ export default function AuthPage() {
         
         await fetch('/api/welcome', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: userCredential.user.email,
             name: defaultName 
@@ -433,7 +426,19 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
-      await window.confirmationResult.confirm(otpCode);
+      const userCredential = await window.confirmationResult.confirm(otpCode);
+      
+      if (authMode === 'signup' && userCredential.user) {
+        const defaultName = `Member_${phoneNumber.slice(-4)}`;
+        await fetch('/api/welcome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: userCredential.user.email || `${phoneNumber}@phone.user`,
+            name: defaultName
+          }),
+        });
+      }
     } catch (error: any) {
       alert("Invalid code. Please try again.");
       setIsLoading(false);
