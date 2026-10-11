@@ -249,7 +249,7 @@ export default function HealthAndSafetyPage() {
           </p>
           <div className="pt-2">
             <a 
-              href="mailto:safety@skillforge.africa"
+              href="mailto:support@skillforge.africa"
               className="inline-block rounded-lg bg-emerald-600 text-white px-6 py-3 text-[14px] font-bold hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer"
             >
               Contact Safety Desk

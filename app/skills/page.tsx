@@ -204,7 +204,10 @@ export default function SkillsPage() {
         
         const data = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter((doc: any) => doc.status === 'approved' || doc.status === 'live');
+          .filter((doc: any) => 
+            (doc.status === 'approved' || doc.status === 'live') && 
+            doc.isArchived !== true 
+          );
         
         setLiveSkills(data);
       } catch (error) {

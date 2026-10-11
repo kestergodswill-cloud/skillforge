@@ -23,10 +23,10 @@ import {
   HiOutlineIdentification,
   HiOutlineEllipsisHorizontal,
   HiOutlineEnvelope,
-  HiOutlineXCircle,
   HiOutlineChatBubbleLeft,
   HiOutlinePhone,
-  HiOutlineDevicePhoneMobile
+  HiOutlineDevicePhoneMobile,
+  HiOutlineXCircle
 } from 'react-icons/hi2';
 
 export default function AdminDashboardPage() {
@@ -47,10 +47,17 @@ export default function AdminDashboardPage() {
   });
   
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
-  
   const [selectedEventToView, setSelectedEventToView] = useState<any | null>(null);
   const [selectedUserToView, setSelectedUserToView] = useState<any | null>(null);
   const [showEventDropdown, setShowEventDropdown] = useState(false);
+
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: '', id: '', title: '' });
+  const [notification, setNotification] = useState({ show: false, message: '' });
+
+  const triggerNotification = (msg: string) => {
+    setNotification({ show: true, message: msg });
+    setTimeout(() => setNotification({ show: false, message: '' }), 3500);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -69,7 +76,7 @@ export default function AdminDashboardPage() {
           router.push('/'); 
         }
       } catch (error) {
-        console.error("Admin verification failed:", error);
+        console.error(error);
         router.push('/');
       }
     });
@@ -81,28 +88,19 @@ export default function AdminDashboardPage() {
     try {
       const usersRef = collection(db, 'users');
       const userSnapshot = await getDocs(usersRef);
-      const fetchedUsers = userSnapshot.docs.map(document => ({
-        id: document.id,
-        ...document.data()
-      }));
+      const fetchedUsers = userSnapshot.docs.map(document => ({ id: document.id, ...document.data() }));
       fetchedUsers.sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setUsersList(fetchedUsers);
 
       const eventsRef = collection(db, 'programs');
       const eventSnapshot = await getDocs(eventsRef);
-      const fetchedEvents = eventSnapshot.docs.map(document => ({
-        id: document.id,
-        ...document.data()
-      }));
+      const fetchedEvents = eventSnapshot.docs.map(document => ({ id: document.id, ...document.data() }));
       fetchedEvents.sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setEventsList(fetchedEvents);
 
       const reportsRef = collection(db, 'reports');
       const reportsSnapshot = await getDocs(reportsRef);
-      const fetchedReports = reportsSnapshot.docs.map(document => ({
-        id: document.id,
-        ...document.data()
-      }));
+      const fetchedReports = reportsSnapshot.docs.map(document => ({ id: document.id, ...document.data() }));
       fetchedReports.sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setReportsList(fetchedReports);
 
@@ -114,7 +112,7 @@ export default function AdminDashboardPage() {
 
       setIsLoading(false);
     } catch (error) {
-      console.error("Failed to fetch admin data:", error);
+      console.error(error);
       setIsLoading(false);
     }
   };
@@ -128,10 +126,10 @@ export default function AdminDashboardPage() {
       });
       
       setUsersList(prev => prev.map(u => u.id === userId ? { ...u, isVerified: !currentStatus, verificationStatus: !currentStatus ? 'approved' : 'revoked' } : u));
-      
       if (selectedUserToView && selectedUserToView.id === userId) {
         setSelectedUserToView((prev: any) => ({ ...prev, isVerified: !currentStatus, verificationStatus: !currentStatus ? 'approved' : 'revoked' }));
       }
+      triggerNotification(currentStatus ? "Host access revoked" : "Host successfully verified");
     } catch (error) {
       console.error(error);
     } finally {
@@ -148,53 +146,47 @@ export default function AdminDashboardPage() {
         setSelectedEventToView((prev: any) => ({ ...prev, status: newStatus }));
       }
       setShowEventDropdown(false);
+      triggerNotification(`Event marked as ${newStatus}`);
     } catch (error) {
-      console.error("Failed to update event status:", error);
+      console.error(error);
     } finally {
       setIsProcessing(null);
     }
   };
 
-  const deleteUserRecord = async (userId: string) => {
-    if (!window.confirm("Are you sure you want to delete this user's profile data?")) return;
-    setIsProcessing(userId);
+  const openDeleteModal = (type: string, id: string, title: string) => {
+    setDeleteModal({ isOpen: true, type, id, title });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.id) return;
+    const { id, type } = deleteModal;
+    setIsProcessing(`delete_${id}`);
+
     try {
-      await deleteDoc(doc(db, 'users', userId));
-      setUsersList(prev => prev.filter(u => u.id !== userId));
-      if (selectedUserToView && selectedUserToView.id === userId) {
-        setSelectedUserToView(null);
+      if (type === 'user') {
+        await deleteDoc(doc(db, 'users', id));
+        setUsersList(prev => prev.filter(u => u.id !== id));
+        if (selectedUserToView?.id === id) setSelectedUserToView(null);
+        triggerNotification("User deleted permanently.");
+        
+      } else if (type === 'event') {
+        await deleteDoc(doc(db, 'programs', id));
+        setEventsList(prev => prev.filter(e => e.id !== id));
+        if (selectedEventToView?.id === id) setSelectedEventToView(null);
+        setShowEventDropdown(false);
+        triggerNotification("Event deleted permanently.");
+        
+      } else if (type === 'report') {
+        await deleteDoc(doc(db, 'reports', id));
+        setReportsList(prev => prev.filter(r => r.id !== id));
+        triggerNotification("Report resolved and removed.");
       }
-    } catch (error) {
+      setDeleteModal({ isOpen: false, type: '', id: '', title: '' });
+    } catch (error: any) {
       console.error(error);
-    } finally {
-      setIsProcessing(null);
-    }
-  };
-
-  const deleteEventRecord = async (eventId: string) => {
-    if (!window.confirm("Are you sure you want to permanently delete this event?")) return;
-    setIsProcessing(eventId);
-    try {
-      await deleteDoc(doc(db, 'programs', eventId));
-      setEventsList(prev => prev.filter(e => e.id !== eventId));
-      if (selectedEventToView && selectedEventToView.id === eventId) {
-        setSelectedEventToView(null);
-      }
-      setShowEventDropdown(false);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsProcessing(null);
-    }
-  };
-
-  const deleteReportRecord = async (reportId: string) => {
-    setIsProcessing(reportId);
-    try {
-      await deleteDoc(doc(db, 'reports', reportId));
-      setReportsList(prev => prev.filter(r => r.id !== reportId));
-    } catch (error) {
-      console.error(error);
+      alert(`Firebase Error: ${error.message}`);
+      setDeleteModal({ isOpen: false, type: '', id: '', title: '' });
     } finally {
       setIsProcessing(null);
     }
@@ -207,7 +199,7 @@ export default function AdminDashboardPage() {
       await setDoc(doc(db, 'settings', 'global'), { [key]: newValue }, { merge: true });
       setSettings(prev => ({ ...prev, [key]: newValue }));
     } catch (error) {
-      console.error("Failed to update settings:", error);
+      console.error(error);
     } finally {
       setIsProcessing(null);
     }
@@ -368,7 +360,7 @@ export default function AdminDashboardPage() {
                               
                               {!userItem.isAdmin && (
                                 <button
-                                  onClick={() => deleteUserRecord(userItem.id)}
+                                  onClick={() => openDeleteModal('user', userItem.id, userItem.name || userItem.email || 'this user')}
                                   disabled={isProcessing === userItem.id}
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors disabled:opacity-50 cursor-pointer"
                                 >
@@ -431,7 +423,7 @@ export default function AdminDashboardPage() {
 
                           {!userItem.isAdmin && (
                             <button
-                              onClick={() => deleteUserRecord(userItem.id)}
+                              onClick={() => openDeleteModal('user', userItem.id, userItem.name || userItem.email || 'this user')}
                               disabled={isProcessing === userItem.id}
                               className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-50 bg-slate-50 dark:bg-slate-800 rounded-lg cursor-pointer"
                             >
@@ -569,7 +561,7 @@ export default function AdminDashboardPage() {
                         <p className="text-[10px] text-slate-400">Reported by: {report.reporterEmail || 'Anonymous'}</p>
                       </div>
                       <button
-                        onClick={() => deleteReportRecord(report.id)}
+                        onClick={() => openDeleteModal('report', report.id, report.title || 'this report')}
                         disabled={isProcessing === report.id}
                         className="px-4 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center gap-2 w-full sm:w-auto cursor-pointer"
                       >
@@ -732,7 +724,7 @@ export default function AdminDashboardPage() {
                  
                  {!selectedUserToView.isAdmin && (
                    <button 
-                     onClick={() => deleteUserRecord(selectedUserToView.id)} 
+                     onClick={() => openDeleteModal('user', selectedUserToView.id, selectedUserToView.name || selectedUserToView.email || 'this user')} 
                      className="w-full sm:w-auto px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition-colors flex justify-center items-center gap-1.5 border border-rose-100 dark:border-rose-900 order-2 sm:order-2 cursor-pointer"
                    >
                      <HiOutlineTrash className="text-sm sm:text-base" /> Delete
@@ -771,33 +763,40 @@ export default function AdminDashboardPage() {
                     </button>
 
                     {showEventDropdown && (
-                      <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in zoom-in-95">
+                      <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-50 animate-in fade-in zoom-in-95">
                         
-                        <div className="px-4 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Moderation</div>
+                        <div className="px-4 py-1.5 text-xs font-bold text-slate-500 border-b border-slate-100 dark:border-slate-700">Moderation</div>
                         <button
                           onClick={() => updateEventStatus(selectedEventToView.id, 'approved')}
-                          className="w-full text-left px-4 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 flex items-center gap-2 cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 flex items-center gap-2 cursor-pointer"
                         >
                           <HiOutlineCheck className="text-base" /> Approve Event
                         </button>
                         
                         <button
                           onClick={() => updateEventStatus(selectedEventToView.id, 'rejected')}
-                          className="w-full text-left px-4 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 flex items-center gap-2 cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 flex items-center gap-2 cursor-pointer"
                         >
                           <HiOutlineXCircle className="text-base" /> Reject Event
                         </button>
 
                         <div className="my-1 border-t border-slate-100 dark:border-slate-700"></div>
 
-                        <div className="px-4 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Contact Host</div>
+                        <div className="px-4 py-1.5 text-xs font-bold text-slate-500 border-b border-slate-100 dark:border-slate-700">Contact Host</div>
                         
                         <button
                           onClick={() => {
                             setShowEventDropdown(false);
-                            router.push(`/messages/${selectedEventToView.hostId}`);
+                            const hostIdentifier = selectedEventToView.hostId || selectedEventToView.userId || selectedEventToView.uid || selectedEventToView.organizerId || selectedEventToView.creatorId;
+                            
+                            if (!hostIdentifier) {
+                              alert("System error: The creator's ID is missing from this event record.");
+                              return;
+                            }
+                            
+                            router.push(`/host/${hostIdentifier}`);
                           }}
-                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
                         >
                           <HiOutlineChatBubbleLeft className="text-base text-emerald-500" /> Inbuilt Message
                         </button>
@@ -806,7 +805,7 @@ export default function AdminDashboardPage() {
                           <a
                             href={`mailto:${selectedEventToView.contactEmail}?subject=Regarding your event "${selectedEventToView.title}"`}
                             onClick={() => setShowEventDropdown(false)}
-                            className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
                           >
                             <HiOutlineEnvelope className="text-base text-blue-500" /> Send Email
                           </a>
@@ -817,7 +816,7 @@ export default function AdminDashboardPage() {
                             <a
                               href={`tel:${selectedEventToView.contactPhone}`}
                               onClick={() => setShowEventDropdown(false)}
-                              className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                              className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
                             >
                               <HiOutlinePhone className="text-base text-purple-500" /> Call Phone
                             </a>
@@ -826,7 +825,7 @@ export default function AdminDashboardPage() {
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => setShowEventDropdown(false)}
-                              className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                              className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
                             >
                               <HiOutlineDevicePhoneMobile className="text-base text-green-500" /> WhatsApp Chat
                             </a>
@@ -836,8 +835,8 @@ export default function AdminDashboardPage() {
                         <div className="my-1 border-t border-slate-100 dark:border-slate-700"></div>
 
                         <button
-                          onClick={() => deleteEventRecord(selectedEventToView.id)}
-                          className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 cursor-pointer"
+                          onClick={() => openDeleteModal('event', selectedEventToView.id, selectedEventToView.title || 'this event')}
+                          className="w-full text-left px-4 py-2 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 cursor-pointer"
                         >
                           <HiOutlineTrash className="text-base" /> Delete Event
                         </button>
@@ -915,11 +914,52 @@ export default function AdminDashboardPage() {
                  <button onClick={() => { setSelectedEventToView(null); setShowEventDropdown(false); }} className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
                    Close Preview
                  </button>
-
-                 <p className="text-xs text-slate-400 italic">Click the **...** menu in the top right to moderate or contact host.</p>
               </div>
               
             </div>
+          </div>
+        )}
+
+        {deleteModal.isOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-lg shadow-lg border border-slate-200 dark:border-slate-800">
+              
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Confirm Deletion
+                </h3>
+              </div>
+              
+              <div className="p-4 py-5">
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Are you sure you want to delete <b>{deleteModal.title}</b>? This action is permanent and cannot be undone.
+                </p>
+              </div>
+              
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 rounded-b-lg border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setDeleteModal({ isOpen: false, type: '', id: '', title: '' })}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={isProcessing === `delete_${deleteModal.id}`}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  {isProcessing === `delete_${deleteModal.id}` ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {notification.show && (
+          <div className="fixed bottom-5 right-5 z-[300] bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-in slide-in-from-bottom-5">
+            <HiOutlineCheckBadge className="text-xl" />
+            <span className="font-medium text-sm">{notification.message}</span>
           </div>
         )}
 

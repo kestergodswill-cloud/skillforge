@@ -10,7 +10,10 @@ import {
   HiOutlineSparkles, 
   HiOutlineUserGroup,
   HiChevronLeft,
-  HiChevronRight
+  HiChevronRight,
+  HiOutlineEnvelope,
+  HiOutlinePhone,
+  HiOutlineXMark
 } from 'react-icons/hi2';
 
 export default function Home() {
@@ -26,6 +29,7 @@ export default function Home() {
   ];
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showContactInfo, setShowContactInfo] = useState(false);
 
   const nextImage = () => {
     setCurrentIndex((prev) => (prev === carouselImages.length - 1 ? 0 : prev + 1));
@@ -47,7 +51,7 @@ export default function Home() {
 
         <div className="relative z-10 mx-auto max-w-4xl text-center space-y-6 sm:space-y-8">
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
             Practical skills for work. <br />
             <span className="text-emerald-400">Vital knowledge for life.</span>
           </h1>
@@ -108,7 +112,6 @@ export default function Home() {
               <button 
                 onClick={prevImage}
                 className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md text-slate-900 dark:text-white flex items-center justify-center shadow-lg opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all hover:bg-white dark:hover:bg-slate-900 hover:scale-105 cursor-pointer"
-                aria-label="Previous image"
               >
                 <HiChevronLeft className="text-xl sm:text-2xl pr-[1px] sm:pr-0.5" />
               </button>
@@ -116,7 +119,6 @@ export default function Home() {
               <button 
                 onClick={nextImage}
                 className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md text-slate-900 dark:text-white flex items-center justify-center shadow-lg opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all hover:bg-white dark:hover:bg-slate-900 hover:scale-105 cursor-pointer"
-                aria-label="Next image"
               >
                 <HiChevronRight className="text-xl sm:text-2xl pl-[1px] sm:pl-0.5" />
               </button>
@@ -131,7 +133,6 @@ export default function Home() {
                         ? 'w-8 bg-white shadow-md' 
                         : 'w-2 bg-white/60 hover:bg-white'
                     }`}
-                    aria-label={`Go to slide ${idx + 1}`}
                   />
                 ))}
               </div>
@@ -197,6 +198,83 @@ export default function Home() {
             </Link>
 
           </div>
+        </div>
+      </section>
+
+      <section className="bg-emerald-50/50 dark:bg-emerald-950/10 py-16 sm:py-24 px-6 sm:px-12 border-t border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row items-center gap-10 lg:gap-16">
+          
+          <div className="w-full lg:w-1/2">
+            <div className="relative aspect-[4/3] rounded-[1.5rem] overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800">
+              <img 
+                src="/image/hero-7.jpg" 
+                alt="Sponsor a class" 
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+
+          <div className="w-full lg:w-1/2 flex flex-col items-start text-left space-y-4">
+            <span className="text-[11px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+              Sponsorship
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
+              Fund a class. <br className="hidden sm:block" /> Empower the streets.
+            </h2>
+            <div className="space-y-4 text-slate-600 dark:text-slate-400 text-[14px] sm:text-[15px] leading-relaxed max-w-xl">
+              <p>
+                SkillForge is completely free for learners, but teaching takes time and resources. If you want to make a direct impact, you can sponsor a training session. 
+              </p>
+              <p>
+                Here is how it works: You let us know the type of class you want to fund and make the payment to SkillForge. We then select a verified, experienced host from our platform and pay them to teach the class completely free for the public. This ensures the educator is fairly compensated, the community learns at no cost, and it helps keep our platform running.
+              </p>
+            </div>
+
+            <div className="pt-4 w-full min-h-[44px]">
+              {!showContactInfo ? (
+                <button 
+                  onClick={() => setShowContactInfo(true)}
+                  className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg text-[13px] font-bold transition-colors active:scale-95 cursor-pointer"
+                >
+                  <HiOutlineHeart className="text-base" /> Contact Us to Sponsor
+                </button>
+              ) : (
+                <div className="flex flex-col w-full gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <button 
+                    onClick={() => setShowContactInfo(false)}
+                    className="flex items-center gap-1.5 text-[13px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer w-fit group"
+                  >
+                    Reach out to us directly
+                    <HiOutlineXMark className="text-base text-slate-400 group-hover:text-rose-500 transition-colors" />
+                  </button>
+                  
+                  <div className="flex flex-wrap items-center gap-3 w-full">
+                    <a 
+                      href="mailto:support@skillforge.africa" 
+                      className="inline-flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-lg text-[13px] font-bold transition-colors hover:bg-slate-800 dark:hover:bg-slate-200 active:scale-95 border border-transparent"
+                    >
+                      <HiOutlineEnvelope className="text-base shrink-0" /> support@skillforge.africa
+                    </a>
+                    
+                    <a 
+                      href="tel:+2348131566614" 
+                      className="inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[13px] font-bold transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95"
+                    >
+                      <HiOutlinePhone className="text-base text-emerald-600 dark:text-emerald-400 shrink-0" /> +234 813 156 6614
+                    </a>
+
+                    <a 
+                      href="tel:+2347030971771" 
+                      className="inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[13px] font-bold transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95"
+                    >
+                      <HiOutlinePhone className="text-base text-emerald-600 dark:text-emerald-400 shrink-0" /> +234 703 097 1771
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </section>
 
