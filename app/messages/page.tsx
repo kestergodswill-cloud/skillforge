@@ -2,19 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { HiOutlineChatBubbleLeftRight, HiOutlineTrash } from 'react-icons/hi2';
+import { HiOutlineChatBubbleLeftRight, HiOutlineTrash, HiOutlineArrowLeft } from 'react-icons/hi2';
 
 export default function MessagesInboxPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [chats, setChats] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [groupTitle, setGroupTitle] = useState('');
@@ -112,6 +109,14 @@ export default function MessagesInboxPage() {
     return () => unsubscribe();
   }, [currentUser]);
 
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/');
+    }
+  };
+
   const handleUpgradeAccount = async () => {
     isSigningOutRef.current = true;
     try {
@@ -142,6 +147,7 @@ export default function MessagesInboxPage() {
         lastMessage: `Group "${groupTitle.trim()}" created`,
         lastMessageSenderId: currentUser.uid,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         unreadCount: unreadMap
       });
 
@@ -187,18 +193,14 @@ export default function MessagesInboxPage() {
 
   if (isLoading && !currentUser && !showGuestModal) {
     return (
-      <main className="min-h-screen bg-white dark:bg-slate-950 flex flex-col justify-between font-sans">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-        </div>
-        <Footer />
+      <main className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center font-sans">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-white sm:bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col justify-between font-sans transition-colors duration-300">
+    <main className="min-h-screen bg-white sm:bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col font-sans transition-colors duration-300">
       
       {showGuestModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -236,129 +238,136 @@ export default function MessagesInboxPage() {
         />
       )}
 
-      <div>
-        <Navbar />
+      <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full sm:px-6 sm:py-8">
         
-        <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full sm:px-6 sm:py-8">
-        
-          <div className="px-5 py-4 sm:px-0 sm:py-0 shrink-0 border-b border-slate-100 dark:border-slate-800 sm:border-none flex items-center justify-between mb-4 sm:mb-6">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Messages</h1>
-            <button 
-              onClick={() => setIsGroupModalOpen(true)}
-              className="text-[13px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3 py-2 rounded-lg hover:bg-emerald-600 dark:hover:bg-emerald-500 dark:hover:text-white transition-colors cursor-pointer shadow-sm"
+        <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-950/95 sm:bg-transparent dark:sm:bg-transparent backdrop-blur-md sm:backdrop-blur-none px-4 py-3.5 sm:px-0 sm:py-0 shrink-0 border-b border-slate-100 dark:border-slate-800 sm:border-none flex items-center justify-between sm:mb-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBack}
+              className="p-2 -ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Go back"
             >
-              + New group
+              <HiOutlineArrowLeft className="text-xl" />
             </button>
+            <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Messages
+            </h1>
           </div>
-          
-          <div className="flex-1 bg-white dark:bg-slate-900 sm:rounded-2xl sm:shadow-sm sm:border border-slate-200 dark:border-slate-800 overflow-hidden">
-            {chats.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-10 py-20 text-center h-full">
-                <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mb-4">
-                  <HiOutlineChatBubbleLeftRight className="text-3xl text-emerald-600 dark:text-emerald-500" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">No Messages Yet</h3>
-                <p className="text-[14px] text-slate-500 dark:text-slate-400 max-w-sm mt-1 leading-relaxed">
-                  When you contact event hosts, members, or create discussion groups, your active chats will appear here. Hard press any conversation to manage it.
-                </p>
+
+          <button 
+            onClick={() => setIsGroupModalOpen(true)}
+            className="text-[13px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3.5 py-2 rounded-lg hover:bg-emerald-600 dark:hover:bg-emerald-500 dark:hover:text-white transition-colors cursor-pointer shadow-sm"
+          >
+            + New group
+          </button>
+        </div>
+        
+        <div className="flex-1 bg-white dark:bg-slate-900 sm:rounded-2xl sm:shadow-sm sm:border border-slate-200 dark:border-slate-800 overflow-hidden">
+          {chats.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-10 py-24 text-center h-full">
+              <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center mb-4">
+                <HiOutlineChatBubbleLeftRight className="text-3xl text-emerald-600 dark:text-emerald-500" />
               </div>
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                {chats.map((chat) => {
-                  const unreadCount = chat.unreadCount?.[currentUser?.uid || ''] || 0;
-                  const lastMessageText = chat.lastMessage || 'Tap to view conversation...';
-                  const isMe = chat.lastMessageSenderId === currentUser?.uid;
-                  const isMenuShowing = activeMenuChatId === chat.id;
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">No Messages Yet</h3>
+              <p className="text-[14px] text-slate-500 dark:text-slate-400 max-w-sm mt-1 leading-relaxed">
+                When you contact event hosts, members, or create discussion groups, your active chats will appear here. Hard press any conversation to manage it.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              {chats.map((chat) => {
+                const unreadCount = chat.unreadCount?.[currentUser?.uid || ''] || 0;
+                const lastMessageText = chat.lastMessage || 'Tap to view conversation...';
+                const isMe = chat.lastMessageSenderId === currentUser?.uid;
+                const isMenuShowing = activeMenuChatId === chat.id;
 
-                  return (
-                    <div 
-                      key={chat.id}
-                      onClick={() => handleChatClick(chat.id)}
-                      onMouseDown={() => handlePressStart(chat.id)}
-                      onMouseUp={handlePressEnd}
-                      onMouseLeave={handlePressEnd}
-                      onTouchStart={() => handlePressStart(chat.id)}
-                      onTouchEnd={handlePressEnd}
-                      onTouchMove={handlePressEnd}
-                      className={`relative flex items-center gap-4 p-4 sm:p-5 transition-colors cursor-pointer group select-none ${
-                        isMenuShowing ? 'bg-slate-50 dark:bg-slate-800/50 z-50 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <div className="relative shrink-0">
-                        {chat.isGroup ? (
-                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 font-bold text-base border border-slate-200 dark:border-slate-700">
-                            GRP
-                          </div>
-                        ) : chat.recipient?.photoURL ? (
-                          <img 
-                            src={chat.recipient.photoURL} 
-                            alt={chat.recipient.name} 
-                            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-lg border border-emerald-200 dark:border-emerald-800">
-                            {chat.recipient?.name?.charAt(0) || 'U'}
-                          </div>
-                        )}
-                        
-                        {!chat.isGroup && chat.recipient?.isOnline && (
-                          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full"></div>
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-baseline mb-1">
-                          <h3 className={`text-[15px] sm:text-[16px] truncate transition-colors group-hover:text-emerald-600 dark:group-hover:text-emerald-400 ${unreadCount > 0 ? 'font-extrabold text-slate-900 dark:text-white' : 'font-bold text-slate-800 dark:text-slate-200'}`}>
-                            {chat.isGroup ? chat.title : (chat.recipient?.name || 'Community Member')}
-                          </h3>
-                          <span className={`text-[11px] font-semibold ${unreadCount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                            {chat.updatedAt ? new Date(chat.updatedAt.toDate()).toLocaleDateString() : 'New'}
-                          </span>
+                return (
+                  <div 
+                    key={chat.id}
+                    onClick={() => handleChatClick(chat.id)}
+                    onMouseDown={() => handlePressStart(chat.id)}
+                    onMouseUp={handlePressEnd}
+                    onMouseLeave={handlePressEnd}
+                    onTouchStart={() => handlePressStart(chat.id)}
+                    onTouchEnd={handlePressEnd}
+                    onTouchMove={handlePressEnd}
+                    className={`relative flex items-center gap-4 p-4 sm:p-5 transition-colors cursor-pointer group select-none ${
+                      isMenuShowing ? 'bg-slate-50 dark:bg-slate-800/50 z-50 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <div className="relative shrink-0">
+                      {chat.isGroup ? (
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 font-bold text-base border border-slate-200 dark:border-slate-700">
+                          GRP
                         </div>
-                        <div className="flex items-center justify-between">
-                          <p className={`text-[14px] truncate pr-4 ${unreadCount > 0 ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
-                            {chat.isGroup ? (
-                              <span>{isMe ? <span className="text-slate-400 dark:text-slate-500 font-normal">You: </span> : ''}{lastMessageText}</span>
-                            ) : chat.recipient?.isOnline ? (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">Online</span>
-                            ) : (
-                              <span>{isMe ? <span className="text-slate-400 dark:text-slate-500 font-normal">You: </span> : ''}{lastMessageText}</span>
-                            )}
-                          </p>
-                          
-                          {unreadCount > 0 && (
-                            <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-emerald-500 text-white text-[11px] font-bold rounded-full shrink-0">
-                              {unreadCount > 99 ? '99+' : unreadCount}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {isMenuShowing && (
-                        <div className="absolute left-20 bottom-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl overflow-hidden flex items-center z-50 animate-in zoom-in-95 duration-100">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuChatId(null);
-                              setChatToDelete(chat);
-                            }}
-                            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                          >
-                            <HiOutlineTrash className="text-sm text-rose-500" /> Delete chat
-                          </button>
+                      ) : chat.recipient?.photoURL ? (
+                        <img 
+                          src={chat.recipient.photoURL} 
+                          alt={chat.recipient.name} 
+                          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-lg border border-emerald-200 dark:border-emerald-800">
+                          {chat.recipient?.name?.charAt(0) || 'U'}
                         </div>
                       )}
-
+                      
+                      {!chat.isGroup && chat.recipient?.isOnline && (
+                        <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full"></div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <h3 className={`text-[15px] sm:text-[16px] truncate transition-colors group-hover:text-emerald-600 dark:group-hover:text-emerald-400 ${unreadCount > 0 ? 'font-extrabold text-slate-900 dark:text-white' : 'font-bold text-slate-800 dark:text-slate-200'}`}>
+                          {chat.isGroup ? chat.title : (chat.recipient?.name || 'Community Member')}
+                        </h3>
+                        <span className={`text-[11px] font-semibold ${unreadCount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {chat.updatedAt?.toDate ? new Date(chat.updatedAt.toDate()).toLocaleDateString() : 'New'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className={`text-[14px] truncate pr-4 ${unreadCount > 0 ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {chat.isGroup ? (
+                            <span>{isMe ? <span className="text-slate-400 dark:text-slate-500 font-normal">You: </span> : ''}{lastMessageText}</span>
+                          ) : chat.recipient?.isOnline ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">Online</span>
+                          ) : (
+                            <span>{isMe ? <span className="text-slate-400 dark:text-slate-500 font-normal">You: </span> : ''}{lastMessageText}</span>
+                          )}
+                        </p>
+                        
+                        {unreadCount > 0 && (
+                          <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-emerald-500 text-white text-[11px] font-bold rounded-full shrink-0">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {isMenuShowing && (
+                      <div className="absolute left-20 bottom-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl overflow-hidden flex items-center z-50 animate-in zoom-in-95 duration-100">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuChatId(null);
+                            setChatToDelete(chat);
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-rose-600 dark:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                        >
+                          <HiOutlineTrash className="text-sm text-rose-500" /> Delete chat
+                        </button>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Premium Delete Modal */}
       {chatToDelete && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-[380px] rounded-2xl shadow-xl p-8 animate-in zoom-in-95 duration-200">
@@ -369,13 +378,13 @@ export default function MessagesInboxPage() {
             <div className="flex flex-col sm:flex-row-reverse gap-3">
               <button 
                 onClick={confirmDeleteConversation} 
-                className="w-full sm:w-auto px-6 py-2.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-500 transition-colors text-[14px]"
+                className="w-full sm:w-auto px-6 py-2.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-500 transition-colors text-[14px] cursor-pointer"
               >
                 Delete
               </button>
               <button 
                 onClick={() => setChatToDelete(null)} 
-                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-[14px]"
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-[14px] cursor-pointer"
               >
                 Cancel
               </button>
@@ -384,7 +393,6 @@ export default function MessagesInboxPage() {
         </div>
       )}
 
-      {/* Premium New Group Modal */}
       {isGroupModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-[380px] rounded-2xl shadow-xl p-8 animate-in zoom-in-95 duration-200">
@@ -408,14 +416,14 @@ export default function MessagesInboxPage() {
                 <button 
                   type="submit" 
                   disabled={!groupTitle.trim() || isCreatingGroup} 
-                  className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 text-white text-[14px] font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 text-white text-[14px] font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {isCreatingGroup ? 'Creating...' : 'Create'}
                 </button>
                 <button 
                   type="button" 
                   onClick={() => setIsGroupModalOpen(false)}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[14px] font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[14px] font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -424,10 +432,6 @@ export default function MessagesInboxPage() {
           </div>
         </div>
       )}
-
-      <div className="mt-12">
-        <Footer />
-      </div>
     </main>
   );
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,25 +7,87 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import QuickRegistrationModal from '@/components/QuickRegistrationModal';
 import { auth, db } from '@/lib/firebase';
-import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
   HiOutlinePhone, 
   HiOutlineCalendar, 
   HiOutlineMagnifyingGlass,
-  HiOutlineCheckBadge
+  HiOutlineCheckBadge,
+  HiChevronDown,
+  HiOutlineMapPin,
+  HiOutlineClock,
+  HiOutlineEnvelope
 } from 'react-icons/hi2';
 
 export default function HealthAndSafetyPage() {
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [applicationStatuses, setApplicationStatuses] = useState<{ [key: string]: 'pending' | 'approved' | 'rejected' }>({});
+  const [expandedProgramId, setExpandedProgramId] = useState<string | null>(null);
+
   const [searchLocation, setSearchLocation] = useState('');
-  
   const [livePrograms, setLivePrograms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedProgramId, setSelectedProgramId] = useState('');
   const [selectedProgramTitle, setSelectedProgramTitle] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    let unsubscribeRegs: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+
+      if (unsubscribeRegs) {
+        unsubscribeRegs();
+        unsubscribeRegs = null;
+      }
+
+      if (currentUser) {
+        const regsRef = collection(db, 'registrations');
+        const qRegs = query(regsRef, where('userId', '==', currentUser.uid));
+
+        unsubscribeRegs = onSnapshot(
+          qRegs,
+          (regsSnap) => {
+            const statusMap: { [key: string]: 'pending' | 'approved' | 'rejected' } = {};
+
+            regsSnap.docs.forEach((d) => {
+              const data = d.data();
+              const rawStatus = String(data.status || 'pending').toLowerCase().trim();
+
+              let normalizedStatus: 'pending' | 'approved' | 'rejected' = 'pending';
+              if (rawStatus === 'approved' || rawStatus === 'accepted') {
+                normalizedStatus = 'approved';
+              } else if (rawStatus === 'rejected' || rawStatus === 'declined') {
+                normalizedStatus = 'rejected';
+              }
+
+              if (data.programId) {
+                statusMap[data.programId] = normalizedStatus;
+              }
+            });
+
+            setApplicationStatuses(statusMap);
+          },
+          (error) => {
+            console.error('Error listening to registrations:', error);
+          }
+        );
+      } else {
+        setApplicationStatuses({});
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeRegs) unsubscribeRegs();
+    };
+  }, []);
 
   useEffect(() => {
     const fetchPrograms = async () => {
@@ -35,10 +96,15 @@ export default function HealthAndSafetyPage() {
         const q = query(programsRef, where("type", "==", "health"));
         const snapshot = await getDocs(q);
         
-        const data = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const data = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          .filter((item: any) => 
+            (item.status === 'approved' || item.status === 'live') &&
+            item.isArchived !== true
+          );
         
         setLivePrograms(data);
       } catch (error) {
@@ -57,37 +123,60 @@ export default function HealthAndSafetyPage() {
     
     return livePrograms.filter(program => 
       program.city?.toLowerCase().includes(searchLower) ||
-      program.location?.toLowerCase().includes(searchLower) ||
+      program.state?.toLowerCase().includes(searchLower) ||
+      program.country?.toLowerCase().includes(searchLower) ||
       program.title?.toLowerCase().includes(searchLower) ||
       program.organizer?.toLowerCase().includes(searchLower)
     );
   }, [livePrograms, searchLocation]);
 
-  const handleRegisterClick = (title: string) => {
-    if (!auth.currentUser) {
+  const handleRegisterClick = (program: any, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+
+    if (!user) {
       router.push('/auth?next=/health-and-safety');
       return;
     }
-    setSelectedProgramTitle(title);
+    if (program.hostId === user.uid || applicationStatuses[program.id]) {
+      return;
+    }
+
+    setSelectedProgramId(program.id);
+    setSelectedProgramTitle(program.title);
     setIsSuccess(false);
     setIsModalOpen(true);
   };
 
-  const handleFormSubmit = async (details: { fullName: string; phone: string }) => {
-    if (!auth.currentUser) return;
+  const toggleDetails = (program: any) => {
+    const regStatus = applicationStatuses[program.id];
+    const isHost = Boolean(user?.uid && program.hostId && user.uid === program.hostId);
+    if (regStatus !== 'approved' && !isHost) return;
+
+    setExpandedProgramId(prev => (prev === program.id ? null : program.id));
+  };
+
+  const handleFormSubmit = async (details: { fullName: string; phone: string; note?: string }) => {
+    if (!user || !selectedProgramId) return;
+    if (applicationStatuses[selectedProgramId]) return;
     
     setIsProcessing(true);
     try {
-      await addDoc(collection(db, 'health_registrations'), {
-        programTitle: selectedProgramTitle,
-        userId: auth.currentUser.uid,
-        fullName: details.fullName,
-        phone: details.phone,
-        email: auth.currentUser.email,
+      await addDoc(collection(db, 'registrations'), {
+        programId: selectedProgramId,
+        userId: user.uid,
+        fullName: details.fullName.trim(),
+        phone: details.phone.trim(),
+        note: (details.note || '').trim(),
+        email: user.email || '',
         status: 'pending',
         appliedAt: serverTimestamp()
       });
       
+      setApplicationStatuses(prev => ({ ...prev, [selectedProgramId]: 'pending' }));
+      setExpandedProgramId(prev => (prev === selectedProgramId ? null : prev));
       setIsSuccess(true);
     } catch (error) {
       console.error("Error submitting health registration:", error);
@@ -128,7 +217,7 @@ export default function HealthAndSafetyPage() {
         isSuccess={isSuccess}
       />
 
-      <div className="flex-1 w-full max-w-[1400px] mx-auto px-5 pt-[88px] sm:pt-[104px] pb-24">
+      <div className="flex-1 w-full max-w-[1400px] mx-auto px-5 pt-6 sm:pt-10 pb-24">
         
         <div className="max-w-3xl mx-auto text-center mb-12">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
@@ -156,66 +245,152 @@ export default function HealthAndSafetyPage() {
             renderSkeletons()
           ) : filteredPrograms.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
-              {filteredPrograms.map((program) => (
-                <div key={program.id} className="group flex flex-col">
-                  
-                  <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 mb-3 border border-slate-200/50 dark:border-slate-700/50">
-                    <img 
-                      src={program.mediaUrl || program.image || "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"} 
-                      alt={program.title} 
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <div className="absolute top-3 left-3 bg-white dark:bg-slate-900 px-2 py-1 rounded text-[10px] font-extrabold text-slate-900 dark:text-white shadow-sm uppercase tracking-wider z-10">
-                      {program.category || 'General Health'}
-                    </div>
-                  </div>
+              {filteredPrograms.map((program) => {
+                const regStatus = applicationStatuses[program.id];
+                const isHost = Boolean(user?.uid && program.hostId && user.uid === program.hostId);
+                const canViewDetails = regStatus === 'approved' || isHost;
+                const isExpanded = canViewDetails && expandedProgramId === program.id;
 
-                  <div className="flex flex-col flex-1 px-0.5">
-                    <div className="flex justify-between items-start gap-2 mb-1">
-                      <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate">
-                        {program.location || program.city || 'Location TBA'}
-                      </h3>
-                      <span className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
-                        <HiOutlineCalendar className="text-emerald-600 dark:text-emerald-500" />
-                        {program.schedule || 'Dates TBA'}
-                      </span>
-                    </div>
-
-                    <p className="text-[14px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">{program.title}</p>
+                return (
+                  <div key={program.id} className="group flex flex-col">
                     
-                    <div className="mt-1">
-                      <Link 
-                        href={`/profile/${program.hostId}`} 
-                        className="text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                      >
-                        Organized by <span className="font-semibold">{program.organizer || 'Community Member'}</span>
-                      </Link>
-                    </div>
-
-                    {program.highlights && program.highlights.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {program.highlights.slice(0, 2).map((item: string, i: number) => (
-                          <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                            <HiOutlineCheckBadge className="text-emerald-600 dark:text-emerald-500" />
-                            {item}
-                          </span>
-                        ))}
+                    <div className="relative aspect-[4/3] w-full rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 mb-3 border border-slate-200/50 dark:border-slate-700/50">
+                      <img 
+                        src={program.mediaUrl || program.image || "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"} 
+                        alt={program.title} 
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute top-3 left-3 bg-white dark:bg-slate-900 px-2 py-1 rounded text-[10px] font-extrabold text-slate-900 dark:text-white shadow-sm uppercase tracking-wider z-10">
+                        {program.category || 'General Health'}
                       </div>
-                    )}
-                    
-                    <div className="mt-4 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handleRegisterClick(program.title)}
-                        className="w-full rounded-lg py-2.5 text-[13px] font-bold transition-all cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-emerald-600 dark:hover:bg-emerald-500 hover:text-white dark:hover:text-white shadow-sm active:scale-95"
-                      >
-                        Register for Drive
-                      </button>
                     </div>
 
+                    <div className="flex flex-col flex-1 px-0.5">
+                      <div className="flex justify-between items-start gap-2 mb-1">
+                        <h3 className="text-[15px] font-bold text-slate-900 dark:text-white leading-tight truncate">
+                          {program.city || 'TBA'}{program.country ? `, ${program.country}` : ''}
+                        </h3>
+                        <span className="text-[13px] font-bold shrink-0">
+                          {regStatus === 'approved' ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">Approved</span>
+                          ) : regStatus === 'rejected' ? (
+                            <span className="text-rose-600 dark:text-rose-400">Rejected</span>
+                          ) : regStatus === 'pending' ? (
+                            <span className="text-amber-600 dark:text-amber-400">Pending</span>
+                          ) : isHost ? (
+                            <span className="text-slate-900 dark:text-white">Yours</span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 dark:text-slate-400">
+                              <HiOutlineCalendar className="text-emerald-600 dark:text-emerald-500" />
+                              {program.schedule || 'Dates TBA'}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      <p className="text-[14px] font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate">{program.title}</p>
+                      
+                      <div className="mt-1">
+                        <Link 
+                          href={`/profile/${program.hostId}`} 
+                          className="text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                        >
+                          Organized by <span className="font-semibold">{program.organizer || 'Community Member'}</span>
+                        </Link>
+                      </div>
+
+                      {program.highlights && program.highlights.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {program.highlights.slice(0, 2).map((item: string, i: number) => (
+                            <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                              <HiOutlineCheckBadge className="text-emerald-600 dark:text-emerald-500" />
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className={`mt-4 pt-1 ${canViewDetails ? 'grid grid-cols-2 gap-2' : ''}`}>
+                        {canViewDetails && (
+                          <button 
+                            type="button"
+                            onClick={() => toggleDetails(program)}
+                            className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 py-2.5 text-[13px] font-bold text-slate-900 dark:text-white transition-all hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 cursor-pointer"
+                          >
+                            Details
+                            <HiChevronDown className={`text-slate-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleRegisterClick(program, e)}
+                          disabled={!!regStatus || isHost}
+                          className={`w-full rounded-lg py-2.5 text-[13px] font-bold transition-all ${
+                            regStatus === 'approved'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 cursor-default'
+                              : regStatus === 'rejected'
+                              ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 cursor-default'
+                              : regStatus === 'pending'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60 cursor-default'
+                              : isHost
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                              : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-emerald-600 dark:hover:bg-emerald-500 hover:text-white dark:hover:text-white shadow-sm active:scale-95 cursor-pointer'
+                          }`}
+                        >
+                          {regStatus === 'approved'
+                            ? 'Approved'
+                            : regStatus === 'rejected'
+                            ? 'Rejected'
+                            : regStatus === 'pending'
+                            ? 'Pending'
+                            : isHost
+                            ? 'Yours'
+                            : 'Register for Drive'}
+                        </button>
+                      </div>
+
+                      {isExpanded && canViewDetails && (
+                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 text-[13px] text-slate-600 dark:text-slate-400 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <p className="leading-relaxed font-medium text-slate-800 dark:text-slate-200">
+                            {program.description || 'Join this health and safety drive to learn critical preparedness skills directly from certified professionals.'}
+                          </p>
+                          
+                          <div className="space-y-2">
+                            <div className="flex items-start gap-2.5">
+                              <HiOutlineMapPin className="text-lg text-slate-400 shrink-0 mt-0.5" />
+                              <span>{program.address || program.location || program.venue || 'Exact meeting point provided by host'}</span>
+                            </div>
+                            
+                            <div className="flex items-start gap-2.5">
+                              <HiOutlineClock className="text-lg text-slate-400 shrink-0 mt-0.5" />
+                              <span>{program.time || program.schedule || 'Schedule TBA'}</span>
+                            </div>
+
+                            {(program.contactEmail || program.contactPhone) && (
+                              <>
+                                <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/50"></div>
+                                {program.contactEmail && (
+                                  <div className="flex items-center gap-2.5">
+                                    <HiOutlineEnvelope className="text-lg text-slate-400 shrink-0" />
+                                    <a href={`mailto:${program.contactEmail}`} className="hover:text-emerald-600 transition-colors">{program.contactEmail}</a>
+                                  </div>
+                                )}
+                                {program.contactPhone && (
+                                  <div className="flex items-center gap-2.5 mt-1.5">
+                                    <HiOutlinePhone className="text-lg text-slate-400 shrink-0" />
+                                    <a href={`tel:${program.contactPhone}`} className="hover:text-emerald-600 transition-colors">{program.contactPhone}</a>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-24 max-w-md mx-auto">
@@ -226,7 +401,7 @@ export default function HealthAndSafetyPage() {
               </p>
               <button
                 type="button"
-                onClick={() => handleRegisterClick("Custom Regional Hub Request")}
+                onClick={() => handleRegisterClick({ id: 'request', title: 'Custom Regional Hub Request' })}
                 className="inline-block rounded-xl bg-emerald-600 px-6 py-3 text-[13px] font-bold text-white hover:bg-emerald-500 transition-colors shadow-sm cursor-pointer"
               >
                 Request a local hub

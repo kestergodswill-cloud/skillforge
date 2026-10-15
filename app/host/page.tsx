@@ -54,6 +54,7 @@ export default function HostDashboard() {
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: '', title: '' });
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState<string | null>(null);
+  const [updatingApplicantId, setUpdatingApplicantId] = useState<string | null>(null);
   const [notification, setNotification] = useState({ show: false, message: '' });
 
   const triggerNotification = (msg: string) => {
@@ -94,15 +95,15 @@ export default function HostDashboard() {
           const q = query(programsRef, where("hostId", "==", currentUser.uid));
           const snapshot = await getDocs(q);
           
-          const listings = snapshot.docs.map(document => ({
+          const listings: any[] = snapshot.docs.map(document => ({
             id: document.id,
             ...document.data()
           }));
           setMyListings(listings);
 
           if (listings.length > 0) {
-            const programIds = listings.map(l => l.id);
-            const chunks = [];
+            const programIds: string[] = listings.map((l: any) => l.id);
+            const chunks: string[][] = [];
             for (let i = 0; i < programIds.length; i += 10) {
               chunks.push(programIds.slice(i, i + 10));
             }
@@ -113,8 +114,14 @@ export default function HostDashboard() {
               const regsSnap = await getDocs(qRegs);
               regsSnap.docs.forEach(d => {
                 const data = d.data();
-                let normalizedStatus = (data.status || 'pending').toLowerCase().trim();
-                if (normalizedStatus === 'accepted') normalizedStatus = 'approved';
+                const rawStatus = String(data.status || 'pending').toLowerCase().trim();
+                
+                let normalizedStatus: 'pending' | 'approved' | 'rejected' = 'pending';
+                if (rawStatus === 'approved' || rawStatus === 'accepted') {
+                  normalizedStatus = 'approved';
+                } else if (rawStatus === 'rejected' || rawStatus === 'declined') {
+                  normalizedStatus = 'rejected';
+                }
                 
                 const pId = data.programId;
                 if (!regsMap[pId]) regsMap[pId] = [];
@@ -175,15 +182,21 @@ export default function HostDashboard() {
   };
 
   const handleUpdateApplicantStatus = async (regId: string, programId: string, newStatus: 'approved' | 'rejected') => {
+    setUpdatingApplicantId(regId);
     try {
       await updateDoc(doc(db, 'registrations', regId), { status: newStatus });
       setRegistrations(prev => ({
         ...prev,
-        [programId]: prev[programId].map(reg => reg.id === regId ? { ...reg, status: newStatus } : reg)
+        [programId]: (prev[programId] || []).map((reg: any) =>
+          reg.id === regId ? { ...reg, status: newStatus } : reg
+        )
       }));
+      triggerNotification(newStatus === 'approved' ? "Applicant approved." : "Applicant rejected.");
     } catch (error) {
       console.error(error);
       alert("Failed to update status.");
+    } finally {
+      setUpdatingApplicantId(null);
     }
   };
 
@@ -337,7 +350,7 @@ export default function HostDashboard() {
 
       <Navbar />
 
-      <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-6 sm:pt-8 px-5 sm:px-6">
+      <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-4 sm:pt-6 px-5 sm:px-6">
         
         <div className="max-w-4xl mx-auto mb-6 lg:max-w-none">
           <button 
@@ -531,58 +544,78 @@ export default function HostDashboard() {
                           <p className="text-[12px] text-slate-500 dark:text-slate-400 text-center py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">No applicants yet.</p>
                         ) : (
                           <div className="flex flex-col gap-2">
-                            {itemApplicants.map((applicant) => (
-                              <div key={applicant.id} className="flex flex-col gap-2 p-2.5 rounded-[0.75rem] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                                
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-600">
-                                      <HiOutlineUser className="text-sm text-slate-400" />
-                                    </div>
-                                    <div>
-                                      <Link href={`/profile/${applicant.userId}`} className="text-[12px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors block leading-tight">
-                                        {applicant.fullName}
-                                      </Link>
-                                      <a href={`tel:${applicant.phone}`} className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors">
-                                        {applicant.phone}
-                                      </a>
-                                    </div>
-                                  </div>
+                            {itemApplicants.map((applicant: any) => {
+                              const isUpdatingThis = updatingApplicantId === applicant.id;
+
+                              return (
+                                <div key={applicant.id} className="flex flex-col gap-2 p-2.5 rounded-[0.75rem] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                                   
-                                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                                    applicant.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 
-                                    applicant.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
-                                    'bg-amber-100 text-amber-700'
-                                  }`}>
-                                    {applicant.status === 'approved' ? 'Approved' : applicant.status || 'Pending'}
-                                  </span>
-                                </div>
-
-                                {applicant.note && (
-                                  <div className="px-2 py-1.5 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 italic">
-                                    "{applicant.note}"
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="w-7 h-7 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-600">
+                                        <HiOutlineUser className="text-sm text-slate-400" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <Link href={`/host/${applicant.userId}`} className="text-[12px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors block leading-tight truncate">
+                                          {applicant.fullName || 'Community Member'}
+                                        </Link>
+                                        {applicant.phone && (
+                                          <a href={`tel:${applicant.phone}`} className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors block truncate">
+                                            {applicant.phone}
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shrink-0 ${
+                                      applicant.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' : 
+                                      applicant.status === 'rejected' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' : 
+                                      'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                                    }`}>
+                                      {applicant.status === 'approved' ? 'Approved' : applicant.status === 'rejected' ? 'Rejected' : 'Pending'}
+                                    </span>
                                   </div>
-                                )}
 
-                                <div className="flex items-center gap-1.5 pt-1 w-full">
-                                  {(!applicant.status || applicant.status === 'pending') ? (
-                                    <>
-                                      <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'approved')} className="flex-1 px-2 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-500 transition-colors cursor-pointer">
-                                        Approve
-                                      </button>
-                                      <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'rejected')} className="flex-1 px-2 py-1.5 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[11px] font-bold hover:bg-rose-500 hover:text-white transition-colors cursor-pointer">
-                                        Reject
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <div className="flex-1 text-center py-1 text-[11px] font-bold text-slate-400 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800">
-                                      {applicant.status === 'approved' ? 'Approved' : 'Rejected'}
+                                  {applicant.note && (
+                                    <div className="px-2 py-1.5 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 italic">
+                                      "{applicant.note}"
                                     </div>
                                   )}
-                                </div>
 
-                              </div>
-                            ))}
+                                  <div className="flex items-center gap-1.5 pt-1 w-full">
+                                    {applicant.status === 'approved' ? (
+                                      <div className="flex-1 text-center py-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 rounded-md border border-emerald-200 dark:border-emerald-800/60">
+                                        Approved
+                                      </div>
+                                    ) : applicant.status === 'rejected' ? (
+                                      <div className="flex-1 text-center py-1.5 text-[11px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 rounded-md border border-rose-200 dark:border-rose-800/60">
+                                        Rejected
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={isUpdatingThis}
+                                          onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'approved')}
+                                          className="flex-1 px-2 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-500 transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                          {isUpdatingThis ? '...' : 'Approve'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={isUpdatingThis}
+                                          onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'rejected')}
+                                          className="flex-1 px-2 py-1.5 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[11px] font-bold hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                          {isUpdatingThis ? '...' : 'Reject'}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -769,6 +802,7 @@ export default function HostDashboard() {
         </div>
       )}
 
+      <Footer />
     </main>
   );
 }

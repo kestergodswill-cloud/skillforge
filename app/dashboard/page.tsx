@@ -19,7 +19,9 @@ import {
   HiOutlineXMark,
   HiOutlineEllipsisHorizontal,
   HiOutlineClock,
-  HiOutlinePhoto
+  HiOutlinePhoto,
+  HiOutlineCheckBadge,
+  HiOutlineArchiveBox
 } from 'react-icons/hi2';
 
 export default function HostDashboard() {
@@ -33,7 +35,7 @@ export default function HostDashboard() {
   
   const [activeTabApplicants, setActiveTabApplicants] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'live' | 'pending'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'live' | 'pending' | 'archived'>('all');
   
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [isProcessingEdit, setIsProcessingEdit] = useState(false);
@@ -48,6 +50,17 @@ export default function HostDashboard() {
     mediaUrl: ''
   });
   const [selectedEditMedia, setSelectedEditMedia] = useState<File | null>(null);
+
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: '', title: '' });
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isArchiving, setIsArchiving] = useState<string | null>(null);
+  const [updatingApplicantId, setUpdatingApplicantId] = useState<string | null>(null);
+  const [notification, setNotification] = useState({ show: false, message: '' });
+
+  const triggerNotification = (msg: string) => {
+    setNotification({ show: true, message: msg });
+    setTimeout(() => setNotification({ show: false, message: '' }), 3500);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -82,9 +95,9 @@ export default function HostDashboard() {
           const q = query(programsRef, where("hostId", "==", currentUser.uid));
           const snapshot = await getDocs(q);
           
-          const listings = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
+          const listings = snapshot.docs.map(document => ({
+            id: document.id,
+            ...document.data()
           }));
           setMyListings(listings);
 
@@ -101,8 +114,14 @@ export default function HostDashboard() {
               const regsSnap = await getDocs(qRegs);
               regsSnap.docs.forEach(d => {
                 const data = d.data();
-                let normalizedStatus = (data.status || 'pending').toLowerCase().trim();
-                if (normalizedStatus === 'accepted') normalizedStatus = 'approved';
+                const rawStatus = String(data.status || 'pending').toLowerCase().trim();
+                
+                let normalizedStatus: 'pending' | 'approved' | 'rejected' = 'pending';
+                if (rawStatus === 'approved' || rawStatus === 'accepted') {
+                  normalizedStatus = 'approved';
+                } else if (rawStatus === 'rejected' || rawStatus === 'declined') {
+                  normalizedStatus = 'rejected';
+                }
                 
                 const pId = data.programId;
                 if (!regsMap[pId]) regsMap[pId] = [];
@@ -116,7 +135,7 @@ export default function HostDashboard() {
           router.push('/verify');
         }
       } catch (error) {
-        console.error("Auth/Fetch check failed:", error);
+        console.error(error);
       } finally {
         setIsLoading(false);
       }
@@ -124,29 +143,60 @@ export default function HostDashboard() {
     return () => unsubscribe();
   }, [router]);
 
-  const handleDeleteListing = async (id: string) => {
-    if (!confirm("Are you sure you want to permanently delete this event?")) return;
+  const toggleArchiveStatus = async (id: string, currentStatus: boolean) => {
+    setIsArchiving(id);
+    try {
+      await updateDoc(doc(db, 'programs', id), { isArchived: !currentStatus });
+      setMyListings(prev => prev.map(item => item.id === id ? { ...item, isArchived: !currentStatus } : item));
+      triggerNotification(!currentStatus ? "Event moved to archive." : "Event unarchived and restored.");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update archive status.");
+    } finally {
+      setIsArchiving(null);
+      setOpenDropdownId(null);
+    }
+  };
+
+  const triggerDelete = (id: string, title: string) => {
+    setDeleteModal({ isOpen: true, id, title });
+    setOpenDropdownId(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.id) return;
+    setIsDeleting(deleteModal.id);
 
     try {
-      await deleteDoc(doc(db, 'programs', id));
-      setMyListings(prev => prev.filter(item => item.id !== id));
-      setOpenDropdownId(null);
-    } catch (error) {
-      console.error("Error deleting document: ", error);
-      alert("Failed to delete listing.");
+      await deleteDoc(doc(db, 'programs', deleteModal.id));
+      setMyListings(prev => prev.filter(item => item.id !== deleteModal.id));
+      triggerNotification("Event successfully deleted.");
+      setDeleteModal({ isOpen: false, id: '', title: '' });
+    } catch (error: any) {
+      console.error(error);
+      alert(`Firebase Error: ${error.message}`);
+      setDeleteModal({ isOpen: false, id: '', title: '' });
+    } finally {
+      setIsDeleting(null);
     }
   };
 
   const handleUpdateApplicantStatus = async (regId: string, programId: string, newStatus: 'approved' | 'rejected') => {
+    setUpdatingApplicantId(regId);
     try {
       await updateDoc(doc(db, 'registrations', regId), { status: newStatus });
       setRegistrations(prev => ({
         ...prev,
-        [programId]: prev[programId].map(reg => reg.id === regId ? { ...reg, status: newStatus } : reg)
+        [programId]: (prev[programId] || []).map(reg =>
+          reg.id === regId ? { ...reg, status: newStatus } : reg
+        )
       }));
+      triggerNotification(newStatus === 'approved' ? "Applicant approved." : "Applicant rejected.");
     } catch (error) {
-      console.error("Error updating applicant status:", error);
+      console.error(error);
       alert("Failed to update status.");
+    } finally {
+      setUpdatingApplicantId(null);
     }
   };
 
@@ -231,8 +281,9 @@ export default function HostDashboard() {
       
       setMyListings(prev => prev.map(item => item.id === editingEvent.id ? { ...item, ...payload } : item));
       setEditingEvent(null);
+      triggerNotification("Changes saved successfully.");
     } catch (error) {
-      console.error("Failed to update event:", error);
+      console.error(error);
       alert("Failed to save changes.");
     } finally {
       setIsProcessingEdit(false);
@@ -240,13 +291,15 @@ export default function HostDashboard() {
   };
 
   const totalEvents = myListings.length;
-  const pendingEvents = myListings.filter(item => item.status === 'pending' || item.status === 'rejected' || !item.status).length;
-  const liveEvents = myListings.filter(item => item.status === 'approved' || item.status === 'live').length;
+  const archivedEvents = myListings.filter(item => item.isArchived).length;
+  const liveEvents = myListings.filter(item => (item.status === 'approved' || item.status === 'live') && !item.isArchived).length;
+  const pendingEvents = myListings.filter(item => (item.status === 'pending' || item.status === 'rejected' || !item.status) && !item.isArchived).length;
 
   const displayedListings = myListings.filter(item => {
     if (filterStatus === 'all') return true;
-    if (filterStatus === 'live') return item.status === 'approved' || item.status === 'live';
-    if (filterStatus === 'pending') return item.status === 'pending' || item.status === 'rejected' || !item.status;
+    if (filterStatus === 'archived') return item.isArchived === true;
+    if (filterStatus === 'live') return (item.status === 'approved' || item.status === 'live') && !item.isArchived;
+    if (filterStatus === 'pending') return (item.status === 'pending' || item.status === 'rejected' || !item.status) && !item.isArchived;
     return true;
   });
 
@@ -297,7 +350,7 @@ export default function HostDashboard() {
 
       <Navbar />
 
-      <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-6 sm:pt-8 px-5 sm:px-6">
+      <div className="flex-1 w-full max-w-[1400px] mx-auto pb-24 pt-20 sm:pt-24 px-5 sm:px-6">
         
         <div className="max-w-4xl mx-auto mb-6 lg:max-w-none">
           <button 
@@ -343,11 +396,21 @@ export default function HostDashboard() {
               {pendingEvents}
             </span>
           </button>
+
+          <button 
+            onClick={() => setFilterStatus('archived')}
+            className={`pb-3 text-[14px] font-bold whitespace-nowrap border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${filterStatus === 'archived' ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+          >
+            Archived
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${filterStatus === 'archived' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+              {archivedEvents}
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center justify-between mb-4 max-w-4xl mx-auto lg:max-w-none">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            Your Events
+            {filterStatus === 'archived' ? 'Archived Events' : 'Your Events'}
           </h2>
           <button
             onClick={() => router.push('/host/create')}
@@ -366,12 +429,14 @@ export default function HostDashboard() {
             <p className="text-[13px] text-slate-500 dark:text-slate-400 mb-6">
               You don't have any events matching this filter.
             </p>
-            <button
-              onClick={() => router.push('/host/create')}
-              className="inline-block rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-5 py-2.5 text-[13px] font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-            >
-              Publish an Event
-            </button>
+            {filterStatus !== 'archived' && (
+              <button
+                onClick={() => router.push('/host/create')}
+                className="inline-block rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-5 py-2.5 text-[13px] font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Publish an Event
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-w-4xl mx-auto lg:max-w-none">
@@ -381,20 +446,21 @@ export default function HostDashboard() {
               const isViewingApplicants = activeTabApplicants === item.id;
 
               return (
-                <div key={item.id} className="group flex flex-col gap-2.5 p-3 bg-white dark:bg-slate-900 rounded-[1.25rem] border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700">
+                <div key={item.id} className={`group flex flex-col gap-2.5 p-3 bg-white dark:bg-slate-900 rounded-[1.25rem] border ${item.isArchived ? 'border-dashed border-slate-300 dark:border-slate-700 opacity-80 hover:opacity-100' : 'border-slate-200 dark:border-slate-800'} shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700`}>
                   
                   <div className="relative aspect-video w-full rounded-[0.85rem] overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/50 dark:border-slate-700/50">
                     <img 
                       src={item.mediaUrl || "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"} 
                       alt={item.title} 
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${item.isArchived ? 'grayscale' : ''}`}
                     />
                     
                     <div className={`absolute top-2 left-2 px-2 py-1 rounded-md text-[9px] font-extrabold uppercase tracking-wider shadow-sm ${
+                      item.isArchived ? 'bg-slate-700 text-white' :
                       status === 'approved' || status === 'live' ? 'bg-emerald-500 text-white' : 
                       status === 'rejected' ? 'bg-rose-500 text-white' : 'bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white'
                     }`}>
-                      {status === 'approved' || status === 'live' ? 'Live' : status === 'rejected' ? 'Rejected' : 'Pending'}
+                      {item.isArchived ? 'Archived' : status === 'approved' || status === 'live' ? 'Live' : status === 'rejected' ? 'Rejected' : 'Pending'}
                     </div>
 
                     <div className="absolute top-2 right-2 z-30">
@@ -414,13 +480,29 @@ export default function HostDashboard() {
                           <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
                           <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 animate-in fade-in zoom-in-95">
                             <button
-                              onClick={() => openEditModal(item)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(item);
+                              }}
                               className="w-full text-left px-4 py-2 text-[12px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2 cursor-pointer"
                             >
                               <HiOutlinePencil className="text-sm" /> Edit Event
                             </button>
                             <button
-                              onClick={() => handleDeleteListing(item.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleArchiveStatus(item.id, !!item.isArchived);
+                              }}
+                              disabled={isArchiving === item.id}
+                              className="w-full text-left px-4 py-2 text-[12px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                              <HiOutlineArchiveBox className="text-sm" /> {item.isArchived ? 'Unarchive' : 'Archive'}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                triggerDelete(item.id, item.title || 'this event');
+                              }}
                               className="w-full text-left px-4 py-2 text-[12px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 cursor-pointer"
                             >
                               <HiOutlineTrash className="text-sm" /> Delete
@@ -462,58 +544,78 @@ export default function HostDashboard() {
                           <p className="text-[12px] text-slate-500 dark:text-slate-400 text-center py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">No applicants yet.</p>
                         ) : (
                           <div className="flex flex-col gap-2">
-                            {itemApplicants.map((applicant) => (
-                              <div key={applicant.id} className="flex flex-col gap-2 p-2.5 rounded-[0.75rem] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                                
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-600">
-                                      <HiOutlineUser className="text-sm text-slate-400" />
-                                    </div>
-                                    <div>
-                                      <Link href={`/profile/${applicant.userId}`} className="text-[12px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors block leading-tight">
-                                        {applicant.fullName}
-                                      </Link>
-                                      <a href={`tel:${applicant.phone}`} className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors">
-                                        {applicant.phone}
-                                      </a>
-                                    </div>
-                                  </div>
+                            {itemApplicants.map((applicant) => {
+                              const isUpdatingThis = updatingApplicantId === applicant.id;
+
+                              return (
+                                <div key={applicant.id} className="flex flex-col gap-2 p-2.5 rounded-[0.75rem] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                                   
-                                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                                    applicant.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 
-                                    applicant.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
-                                    'bg-amber-100 text-amber-700'
-                                  }`}>
-                                    {applicant.status === 'approved' ? 'Approved' : applicant.status || 'Pending'}
-                                  </span>
-                                </div>
-
-                                {applicant.note && (
-                                  <div className="px-2 py-1.5 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 italic">
-                                    "{applicant.note}"
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="w-7 h-7 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-600">
+                                        <HiOutlineUser className="text-sm text-slate-400" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <Link href={`/profile/${applicant.userId}`} className="text-[12px] font-bold text-slate-900 dark:text-white hover:text-emerald-600 transition-colors block leading-tight truncate">
+                                          {applicant.fullName || 'Community Member'}
+                                        </Link>
+                                        {applicant.phone && (
+                                          <a href={`tel:${applicant.phone}`} className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors block truncate">
+                                            {applicant.phone}
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shrink-0 ${
+                                      applicant.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' : 
+                                      applicant.status === 'rejected' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' : 
+                                      'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                                    }`}>
+                                      {applicant.status === 'approved' ? 'Approved' : applicant.status === 'rejected' ? 'Rejected' : 'Pending'}
+                                    </span>
                                   </div>
-                                )}
 
-                                <div className="flex items-center gap-1.5 pt-1 w-full">
-                                  {(!applicant.status || applicant.status === 'pending') ? (
-                                    <>
-                                      <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'approved')} className="flex-1 px-2 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-500 transition-colors cursor-pointer">
-                                        Approve
-                                      </button>
-                                      <button onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'rejected')} className="flex-1 px-2 py-1.5 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[11px] font-bold hover:bg-rose-500 hover:text-white transition-colors cursor-pointer">
-                                        Reject
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <div className="flex-1 text-center py-1 text-[11px] font-bold text-slate-400 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800">
-                                      {applicant.status === 'approved' ? 'Approved' : 'Rejected'}
+                                  {applicant.note && (
+                                    <div className="px-2 py-1.5 bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 italic">
+                                      "{applicant.note}"
                                     </div>
                                   )}
-                                </div>
 
-                              </div>
-                            ))}
+                                  <div className="flex items-center gap-1.5 pt-1 w-full">
+                                    {applicant.status === 'approved' ? (
+                                      <div className="flex-1 text-center py-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 rounded-md border border-emerald-200 dark:border-emerald-800/60">
+                                        Approved
+                                      </div>
+                                    ) : applicant.status === 'rejected' ? (
+                                      <div className="flex-1 text-center py-1.5 text-[11px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 rounded-md border border-rose-200 dark:border-rose-800/60">
+                                        Rejected
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={isUpdatingThis}
+                                          onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'approved')}
+                                          className="flex-1 px-2 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-500 transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                          {isUpdatingThis ? '...' : 'Approve'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={isUpdatingThis}
+                                          onClick={() => handleUpdateApplicantStatus(applicant.id, item.id, 'rejected')}
+                                          className="flex-1 px-2 py-1.5 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[11px] font-bold hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                          {isUpdatingThis ? '...' : 'Reject'}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -658,6 +760,45 @@ export default function HostDashboard() {
             </div>
             
           </div>
+        </div>
+      )}
+
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-lg shadow-lg border border-slate-200 dark:border-slate-800">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                Confirm Deletion
+              </h3>
+            </div>
+            <div className="p-4 py-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                Are you sure you want to delete <b>{deleteModal.title}</b>? This action is permanent and cannot be undone.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 rounded-b-lg border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setDeleteModal({ isOpen: false, id: '', title: '' })}
+                className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting === deleteModal.id}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
+              >
+                {isDeleting === deleteModal.id ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {notification.show && (
+        <div className="fixed bottom-5 right-5 z-[300] bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-in slide-in-from-bottom-5">
+          <HiOutlineCheckBadge className="text-xl" />
+          <span className="font-medium text-sm">{notification.message}</span>
         </div>
       )}
 
