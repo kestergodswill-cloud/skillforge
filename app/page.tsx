@@ -265,7 +265,8 @@ export default function Home() {
 
                     <a 
                       href="tel:+2347030971771" 
-                      className="inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[13px] font-bold transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95"
+                      className="inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 
+                      border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-lg text-[13px] font-bold transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95"
                     >
                       <HiOutlinePhone className="text-base text-emerald-600 dark:text-emerald-400 shrink-0" /> +234 703 097 1771
                     </a>

@@ -417,7 +417,7 @@ export default function MessagesInboxPage() {
             className="sm:hidden w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-500 text-[13px] font-medium hover:bg-slate-200/70 dark:hover:bg-slate-800/80 transition-colors cursor-pointer text-left"
           >
             <HiOutlineMagnifyingGlass className="text-base text-slate-400 shrink-0" />
-            <span className="truncate">Search people by username or Gmail...</span>
+            <span className="truncate">Search people by username or Email...</span>
           </button>
         </div>
         
@@ -444,7 +444,7 @@ export default function MessagesInboxPage() {
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">No Messages Yet</h3>
               <p className="text-[13px] text-slate-500 dark:text-slate-400 max-w-xs mt-1 leading-normal">
-                Search for a member by username or Gmail, contact event hosts, or create a group to start chatting.
+                Search for a member by username or Email, contact event hosts, or create a group to start chatting.
               </p>
             </div>
           ) : (
